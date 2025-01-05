@@ -194,11 +194,6 @@ func (s *authService) generateJWT(user *domain.User) (string, error) {
 	return security.GenerateJWT(user.ID, s.jwtSecret, 15*time.Minute)
 }
 
-func (s *authService) generateRefreshToken(user *domain.User) (string, error) {
-	// Generate refresh token with 7 days expiration
-	return security.GenerateRefreshToken(user.ID, s.jwtSecret, 7*24*time.Hour)
-}
-
 func generateDeviceID() (string, error) {
 	return security.GenerateDeviceID(), nil
 }

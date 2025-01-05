@@ -43,7 +43,9 @@ func TestAuthFlow(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var loginResp domain.AuthResponse
-	json.NewDecoder(resp.Body).Decode(&loginResp)
+	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
 	assert.NotEmpty(t, loginResp.Token)
 }
 
@@ -89,7 +91,9 @@ func TestAuthFlow_TokenValidation(t *testing.T) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var loginResp domain.AuthResponse
-		json.NewDecoder(resp.Body).Decode(&loginResp)
+		if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
+			t.Fatalf("Failed to decode response: %v", err)
+		}
 		return loginResp.Token
 	}
 
@@ -165,7 +169,9 @@ func TestAuthFlow_AccountLocking(t *testing.T) {
 			// Account should be locked after 5 failed attempts
 			assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 			var response map[string]interface{}
-			json.NewDecoder(resp.Body).Decode(&response)
+			if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+				t.Fatalf("Failed to decode response: %v", err)
+			}
 			assert.Contains(t, response["error"], "locked")
 		}
 	}
