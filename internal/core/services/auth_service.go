@@ -198,7 +198,11 @@ func (s *authService) generateJWT(user *domain.User) (string, error) {
 }
 
 func generateDeviceID() (string, error) {
-	return security.GenerateDeviceID(), nil
+	deviceID, err := security.GenerateDeviceID()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate device ID: %w", err)
+	}
+	return deviceID, nil
 }
 
 func (s *authService) ValidateLoginCode(userID uint, code string) error {

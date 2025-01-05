@@ -71,10 +71,12 @@ func ValidateRefreshToken(tokenString string, secret string) (uint, error) {
 	return claims.UserID, nil
 }
 
-func GenerateDeviceID() string {
+func GenerateDeviceID() (string, error) {
 	b := make([]byte, 16)
-	rand.Read(b)
-	return hex.EncodeToString(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate device ID: %w", err)
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func ValidateToken(tokenString string, secret string) (*domain.User, error) {
