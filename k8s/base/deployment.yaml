@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: fowergram-api
   labels:
-    app: fowergram-api # เพิ่ม labels
+    app: fowergram-api
 spec:
   replicas: 1
   selector:
@@ -35,19 +35,36 @@ spec:
                 secretKeyRef:
                   name: fowergram-secrets
                   key: db-password
-            - name: DB_NAME # เพิ่ม DB_NAME
+            - name: DB_NAME
               valueFrom:
                 secretKeyRef:
                   name: fowergram-secrets
                   key: db-name
-          readinessProbe: # เพิ่ม health check
+            - name: DB_PORT
+              value: "5432"
+            - name: GIN_MODE
+              value: "release"
+            - name: PORT
+              value: "8080"
+            - name: REDIS_HOST
+              value: "localhost"
+            - name: REDIS_PORT
+              value: "6379"
+          readinessProbe:
             httpGet:
-              path: /health
+              path: /health # เปลี่ยนจาก /health เป็น /ping
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 45
+            periodSeconds: 15
+            timeoutSeconds: 5
           resources:
             requests:
               cpu: 100m
@@ -55,3 +72,10 @@ spec:
             limits:
               cpu: 200m
               memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 1000
+            capabilities:
+              drop:
+                - ALL
