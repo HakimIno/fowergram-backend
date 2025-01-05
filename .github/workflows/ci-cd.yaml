@@ -145,6 +145,9 @@ jobs:
 
       - name: Deploy to GKE
         run: |
+          # Apply deployment first
+          kubectl apply -f k8s/deployment.yaml
+          # Then update image
           kubectl set image deployment/fowergram-api fowergram-api=${{ env.IMAGE }}:${{ github.sha }}
           kubectl rollout status deployment/fowergram-api --timeout=300s
 

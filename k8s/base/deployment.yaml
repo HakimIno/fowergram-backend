@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: fowergram-api
+  labels:
+    app: fowergram-api # เพิ่ม labels
 spec:
   replicas: 1
   selector:
@@ -14,7 +16,7 @@ spec:
     spec:
       containers:
         - name: fowergram-api
-          image: asia-southeast1-docker.pkg.dev/fowergram-backend/fowergram-repo/api
+          image: asia-southeast1-docker.pkg.dev/fowergram-backend/fowergram-repo/api:latest
           ports:
             - containerPort: 8080
           env:
@@ -33,6 +35,11 @@ spec:
                 secretKeyRef:
                   name: fowergram-secrets
                   key: db-password
+            - name: DB_NAME # เพิ่ม DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: fowergram-secrets
+                  key: db-name
           resources:
             requests:
               cpu: 100m
@@ -40,3 +47,9 @@ spec:
             limits:
               cpu: 200m
               memory: 256Mi
+          readinessProbe: # เพิ่ม health check
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
