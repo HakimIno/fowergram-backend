@@ -77,8 +77,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     steps:
       - uses: actions/checkout@v2
@@ -115,8 +115,8 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     permissions:
-      contents: 'read'
-      id-token: 'write'
+      contents: "read"
+      id-token: "write"
 
     steps:
       - uses: actions/checkout@v2
@@ -131,6 +131,14 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
+      # เพิ่มขั้นตอนติดตั้ง gke-gcloud-auth-plugin
+      - name: Install gke-gcloud-auth-plugin
+        run: |
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+          sudo apt-get update
+          sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
       - name: Get GKE Credentials
         run: |
           gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE
@@ -138,24 +146,49 @@ jobs:
       - name: Deploy to GKE
         run: |
           kubectl set image deployment/fowergram-api fowergram-api=${{ env.IMAGE }}:${{ github.sha }}
-          kubectl rollout status deployment/fowergram-api
+          kubectl rollout status deployment/fowergram-api --timeout=300s
 
       - name: Verify Deployment
         run: |
+          echo "Checking deployment status..."
           kubectl get pods -l app=fowergram-api
+          echo "Checking service status..."
           kubectl get services -l app=fowergram-api
+          echo "Checking deployment details..."
+          kubectl describe deployment fowergram-api
 
+      # ปรับปรุงการแจ้งเตือน
       - name: Notify Deployment Status
         if: always()
         uses: actions/github-script@v6
         with:
           script: |
-            const { status } = context;
-            const state = status === 'success' ? '✅ Success' : '❌ Failed';
-            const message = `Deployment ${state}\nEnvironment: Production\nCommit: ${context.sha}`;
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.name,
-              body: message
-            });
+            const deployStatus = '${{ job.status }}';
+            const emoji = deployStatus === 'success' ? '✅' : '❌';
+            const message = `
+            # Deployment Status: ${emoji} ${deployStatus.toUpperCase()}
+
+            ## Details
+            - Environment: Production
+            - Commit: \`${context.sha}\`
+            - Image: \`${{ env.IMAGE }}:${context.sha}\`
+
+            ## Action
+            - Workflow: [View Run](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+            `;
+
+            try {
+              if (context.payload.pull_request) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  body: message
+                });
+              } else {
+                console.log('Deployment status:', message);
+              }
+            } catch (error) {
+              console.log('Unable to post comment:', error);
+              console.log('Deployment status:', message);
+            }
