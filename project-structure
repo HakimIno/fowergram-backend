@@ -1,0 +1,51 @@
+instagram-clone/
+├── cmd/
+│   └── api/
+│       └── main.go
+├── internal/
+│   ├── core/
+│   │   ├── domain/
+│   │   │   ├── user.go
+│   │   │   ├── post.go
+│   │   │   └── comment.go
+│   │   ├── ports/
+│   │   │   ├── repositories.go
+│   │   │   └── services.go
+│   │   └── services/
+│   │       ├── user_service.go
+│   │       ├── post_service.go
+│   │       └── auth_service.go
+│   ├── handlers/
+│   │   ├── user_handler.go
+│   │   ├── post_handler.go
+│   │   └── auth_handler.go
+│   ├── repositories/
+│   │   ├── postgres/
+│   │   │   ├── user_repository.go
+│   │   │   └── post_repository.go
+│   │   └── redis/
+│   │       └── cache_repository.go
+│   └── middleware/
+│       ├── auth_middleware.go
+│       └── logger_middleware.go
+├── pkg/
+│   ├── logger/
+│   │   └── logger.go
+│   ├── validator/
+│   │   └── validator.go
+│   └── utils/
+│       └── utils.go
+├── config/
+│   └── config.go
+├── migrations/
+│   ├── 000001_create_users_table.up.sql
+│   └── 000001_create_users_table.down.sql
+├── docker/
+│   ├── app/
+│   │   └── Dockerfile
+│   └── postgres/
+│       └── init.sql
+├── docker-compose.yml
+├── .env
+├── .gitignore
+└── go.mod 

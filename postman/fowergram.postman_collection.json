@@ -1,0 +1,23 @@
+{
+  "info": {
+    "name": "Fowergram API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Register",
+      "request": {
+        "method": "POST",
+        "url": "{{base_url}}/api/v1/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": {
+            "username": "testuser",
+            "email": "test@example.com",
+            "password": "Test123!"
+          }
+        }
+      }
+    }
+  ]
+} 

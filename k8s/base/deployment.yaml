@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fowergram-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fowergram-api
+  template:
+    metadata:
+      labels:
+        app: fowergram-api
+    spec:
+      containers:
+        - name: fowergram-api
+          image: asia-southeast1-docker.pkg.dev/fowergram-backend/fowergram-repo/api
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: fowergram-secrets
+                  key: db-host
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: fowergram-secrets
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: fowergram-secrets
+                  key: db-password
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

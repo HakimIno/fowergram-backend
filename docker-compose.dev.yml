@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: fowergram
+      POSTGRES_PASSWORD: fowergram
+      POSTGRES_DB: fowergram
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - fowergram-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fowergram"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    image: migrate/migrate
+    volumes:
+      - ./migrations:/migrations
+    command: ["-path", "/migrations", "-database",  "postgres://fowergram:fowergram@postgres:5432/fowergram?sslmode=disable", "up"]
+    networks:
+      - fowergram-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - fowergram-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    volumes:
+      - .:/app
+    command: ["go", "run", "cmd/api/main.go"]
+    environment:
+      - DB_HOST=postgres
+      - DB_USER=fowergram
+      - DB_PASSWORD=fowergram
+      - DB_NAME=fowergram
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - PORT=8080
+      - JWT_SECRET=your-secret-key
+    ports:
+      - "8080:8080"
+    networks:
+      - fowergram-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+networks:
+  fowergram-network:
+    driver: bridge
+
+volumes:
+  postgres_data: 

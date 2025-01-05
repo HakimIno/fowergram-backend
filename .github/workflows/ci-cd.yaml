@@ -1,0 +1,59 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  PROJECT_ID: fowergram-backend
+  GKE_CLUSTER: fowergram-cluster
+  GKE_ZONE: asia-southeast1-a
+  IMAGE: asia-southeast1-docker.pkg.dev/fowergram-backend/fowergram-repo/api
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.21"
+
+      - name: Run Tests
+        run: go test -v ./...
+
+  build-and-deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v0
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: |
+          gcloud auth configure-docker asia-southeast1-docker.pkg.dev
+
+      - name: Build and Push Docker image
+        run: |
+          docker build -t $IMAGE:$GITHUB_SHA .
+          docker push $IMAGE:$GITHUB_SHA
+
+      - name: Get GKE Credentials
+        run: |
+          gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE
+
+      - name: Deploy to GKE
+        run: |
+          kubectl set image deployment/fowergram-api fowergram-api=$IMAGE:$GITHUB_SHA
+          kubectl rollout status deployment/fowergram-api
