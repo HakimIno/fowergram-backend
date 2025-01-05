@@ -6,6 +6,10 @@ import (
 
 	"fowergram/internal/core/domain"
 
+	"encoding/hex"
+
+	"crypto/rand"
+
 	"github.com/golang-jwt/jwt"
 )
 
@@ -68,7 +72,9 @@ func ValidateRefreshToken(tokenString string, secret string) (uint, error) {
 }
 
 func GenerateDeviceID() string {
-	return GenerateRandomString(32)
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 func ValidateToken(tokenString string, secret string) (*domain.User, error) {
