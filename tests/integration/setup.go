@@ -16,6 +16,8 @@ import (
 
 	"fmt"
 
+	"os"
+
 	"github.com/gofiber/fiber/v2"
 	pgdriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -110,13 +112,12 @@ func setupTestApp() *fiber.App {
 }
 
 func setupTestDB() *gorm.DB {
-	// Connection parameters
-	const (
-		host     = "postgres"
-		user     = "postgres"
-		password = "postgres"
-		sslmode  = "disable"
-	)
+	// Get database connection parameters from environment variables
+	host := getEnv("DB_HOST", "localhost")
+	user := getEnv("DB_USER", "postgres")
+	password := getEnv("DB_PASSWORD", "postgres")
+	dbName := getEnv("DB_NAME", "fowergram_test")
+	sslmode := "disable"
 
 	// เชื่อมต่อกับ postgres โดยไม่ระบุ database
 	dsn := fmt.Sprintf("host=%s user=%s password=%s sslmode=%s",
@@ -127,19 +128,28 @@ func setupTestDB() *gorm.DB {
 	}
 
 	// Kill all connections to the test database
-	db.Exec("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'fowergram_test'")
+	db.Exec("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = ?", dbName)
 
 	// สร้าง database ถ้ายังไม่มี
-	db.Exec("DROP DATABASE IF EXISTS fowergram_test")
-	db.Exec("CREATE DATABASE fowergram_test")
+	db.Exec("DROP DATABASE IF EXISTS " + dbName)
+	db.Exec("CREATE DATABASE " + dbName)
 
 	// เชื่อมต่อกับ database ที่สร้างใหม่
-	dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=fowergram_test sslmode=%s",
-		host, user, password, sslmode)
+	dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=%s",
+		host, user, password, dbName, sslmode)
 	testDB, err := gorm.Open(pgdriver.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)
 	}
 
 	return testDB
+}
+
+// getEnv returns environment variable value or default if not set
+func getEnv(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value != "" {
+		return value
+	}
+	return defaultValue
 }
