@@ -109,7 +109,7 @@ func setupTestApp() *fiber.App {
 
 func setupTestDB() *gorm.DB {
 	// เชื่อมต่อกับ postgres โดยไม่ระบุ database
-	dsn := "host=localhost user=postgres password=password sslmode=disable"
+	dsn := "host=postgres user=postgres password=postgres sslmode=disable"
 	db, err := gorm.Open(pgdriver.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)
