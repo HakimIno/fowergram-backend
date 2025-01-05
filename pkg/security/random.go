@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
+	"fmt"
 )
 
 // GenerateRandomBytes generates a random byte array of specified length
@@ -28,7 +29,7 @@ func GenerateRandomString(n int) (string, error) {
 func GenerateRandomCode(length int) (string, error) {
 	b := make([]byte, length/2)
 	if _, err := rand.Read(b); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 	return hex.EncodeToString(b)[:length], nil
 }
