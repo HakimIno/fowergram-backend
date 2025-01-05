@@ -14,6 +14,8 @@ import (
 
 	"strings"
 
+	"fmt"
+
 	"github.com/gofiber/fiber/v2"
 	pgdriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -108,8 +110,17 @@ func setupTestApp() *fiber.App {
 }
 
 func setupTestDB() *gorm.DB {
+	// Connection parameters
+	const (
+		host     = "postgres"
+		user     = "postgres"
+		password = "postgres"
+		sslmode  = "disable"
+	)
+
 	// เชื่อมต่อกับ postgres โดยไม่ระบุ database
-	dsn := "host=postgres user=postgres password=postgres sslmode=disable"
+	dsn := fmt.Sprintf("host=%s user=%s password=%s sslmode=%s",
+		host, user, password, sslmode)
 	db, err := gorm.Open(pgdriver.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)
@@ -123,7 +134,8 @@ func setupTestDB() *gorm.DB {
 	db.Exec("CREATE DATABASE fowergram_test")
 
 	// เชื่อมต่อกับ database ที่สร้างใหม่
-	dsn = "host=localhost user=postgres password=password dbname=fowergram_test sslmode=disable"
+	dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=fowergram_test sslmode=%s",
+		host, user, password, sslmode)
 	testDB, err := gorm.Open(pgdriver.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)
