@@ -44,7 +44,10 @@ func (s *authService) Register(user *domain.User) error {
 	}
 
 	// Generate verification code
-	code := security.GenerateRandomCode(6)
+	code, err := security.GenerateRandomCode(6)
+	if err != nil {
+		return fmt.Errorf("failed to generate verification code: %w", err)
+	}
 	authCode := &domain.AuthCode{
 		UserID:    user.ID,
 		Code:      code,
@@ -220,7 +223,10 @@ func (s *authService) InitiateAccountRecovery(email string) error {
 		return fmt.Errorf("user not found: %w", err)
 	}
 
-	code := security.GenerateRandomCode(6)
+	code, err := security.GenerateRandomCode(6)
+	if err != nil {
+		return fmt.Errorf("failed to generate recovery code: %w", err)
+	}
 	recovery := &domain.AccountRecovery{
 		UserID:      user.ID,
 		RequestType: "password_reset",

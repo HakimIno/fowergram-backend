@@ -25,10 +25,10 @@ func GenerateRandomString(n int) (string, error) {
 }
 
 // GenerateRandomCode generates a random numeric code of specified length
-func GenerateRandomCode(length int) string {
+func GenerateRandomCode(length int) (string, error) {
 	b := make([]byte, length/2)
 	if _, err := rand.Read(b); err != nil {
-		return ""
+		return "", err
 	}
-	return hex.EncodeToString(b)[:length]
+	return hex.EncodeToString(b)[:length], nil
 }
