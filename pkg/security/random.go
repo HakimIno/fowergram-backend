@@ -11,7 +11,7 @@ import (
 func GenerateRandomBytes(n int) ([]byte, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 	return b, nil
 }
@@ -20,7 +20,7 @@ func GenerateRandomBytes(n int) ([]byte, error) {
 func GenerateRandomString(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to generate random string: %w", err)
 	}
 	return base64.URLEncoding.EncodeToString(b), nil
 }
