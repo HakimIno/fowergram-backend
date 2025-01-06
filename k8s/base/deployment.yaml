@@ -6,6 +6,12 @@ metadata:
     app: fowergram-api
 spec:
   replicas: 1
+  progressDeadlineSeconds: 600
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: fowergram-api
@@ -15,6 +21,7 @@ spec:
         app: fowergram-api
     spec:
       serviceAccountName: fowergram-sa
+      terminationGracePeriodSeconds: 60
       nodeSelector:
         cloud.google.com/gke-nodepool: cloudsql-pool
       containers:
@@ -23,6 +30,10 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "-c", "sleep 10"]
           env:
             - name: DB_HOST
               value: "cloudsql-proxy"
@@ -57,17 +68,19 @@ spec:
             httpGet:
               path: /ping
               port: 8080
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            timeoutSeconds: 5
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 2
             failureThreshold: 3
+            successThreshold: 1
           livenessProbe:
             httpGet:
               path: /ping
               port: 8080
-            initialDelaySeconds: 45
-            periodSeconds: 15
-            timeoutSeconds: 5
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
           resources:
             requests:
               cpu: 100m
