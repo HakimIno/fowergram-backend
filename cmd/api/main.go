@@ -3,6 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"fowergram/config"
@@ -16,6 +19,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 )
 
 func main() {
@@ -43,9 +47,13 @@ func main() {
 	// Setup Fiber app with custom config
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
+		ReadTimeout:           10 * time.Second,
+		WriteTimeout:          10 * time.Second,
+		IdleTimeout:           120 * time.Second,
 	})
 
 	// Middleware
+	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New())
 
@@ -82,6 +90,16 @@ func main() {
 	users := api.Group("/users")
 	users.Get("/:id", userHandler.GetUser)
 	users.Get("/", userHandler.GetUsers)
+
+	// Graceful shutdown
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-c
+		log.Println("Gracefully shutting down...")
+		_ = app.Shutdown()
+	}()
 
 	// Start server
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)

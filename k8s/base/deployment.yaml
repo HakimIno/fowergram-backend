@@ -6,7 +6,7 @@ metadata:
     app: fowergram-api
 spec:
   replicas: 1
-  progressDeadlineSeconds: 300
+  progressDeadlineSeconds: 600
   selector:
     matchLabels:
       app: fowergram-api
@@ -26,6 +26,7 @@ spec:
       containers:
       - name: fowergram-api
         image: asia-southeast1-docker.pkg.dev/fowergram-backend/fowergram-repo/api:latest
+        imagePullPolicy: Always
         ports:
         - name: http
           containerPort: 8080
@@ -76,20 +77,20 @@ spec:
           httpGet:
             path: /ping
             port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 5
-          timeoutSeconds: 1
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 2
           failureThreshold: 3
         livenessProbe:
           httpGet:
             path: /ping
             port: 8080
-          initialDelaySeconds: 15
-          periodSeconds: 20
-          timeoutSeconds: 1
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 2
           failureThreshold: 3
         lifecycle:
           preStop:
             exec:
-              command: ["/bin/sh", "-c", "sleep 5"]
-      terminationGracePeriodSeconds: 30
+              command: ["/bin/sh", "-c", "sleep 10"]
+      terminationGracePeriodSeconds: 60
