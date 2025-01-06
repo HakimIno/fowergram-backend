@@ -208,16 +208,19 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 	pwTime := time.Since(pwStart)
 	fmt.Printf("Password verification took: %v\n", pwTime)
 
-	// Get location from IP fully async (don't wait)
-	deviceInfo.Location = "Unknown" // Set default
+	// Create a channel to receive location
+	locationChan := make(chan string, 1)
+
+	// Get location from IP fully async
+	deviceInfo.SetLocation("Unknown") // Set default
 	go func() {
 		location, err := s.geoService.GetLocation(deviceInfo.IPAddress)
 		if err != nil {
 			fmt.Printf("failed to get location: %v\n", err)
+			locationChan <- "Unknown"
 			return
 		}
-		// Update location in background
-		deviceInfo.Location = location
+		locationChan <- location
 	}()
 
 	// Generate device ID if not provided
@@ -240,6 +243,14 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 	tokenTime := time.Since(tokenStart)
 	fmt.Printf("Token generation took: %v\n", tokenTime)
 
+	// Wait for location with timeout
+	select {
+	case location := <-locationChan:
+		deviceInfo.SetLocation(location)
+	case <-time.After(100 * time.Millisecond):
+		// Use default "Unknown" if timeout
+	}
+
 	// Log login and send notifications fully async
 	go func() {
 		// Log login
@@ -247,7 +258,7 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 			UserID:    user.ID,
 			DeviceID:  deviceInfo.DeviceID,
 			IPAddress: deviceInfo.IPAddress,
-			Location:  deviceInfo.Location,
+			Location:  deviceInfo.GetLocation(), // Safe to access now
 			UserAgent: deviceInfo.UserAgent,
 			Status:    "success",
 		}
