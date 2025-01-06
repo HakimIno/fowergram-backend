@@ -43,3 +43,15 @@ func (r *userRepository) Update(user *domain.User) error {
 func (r *userRepository) Delete(id uint) error {
 	return r.db.Delete(&domain.User{}, id).Error
 }
+
+func (r *userRepository) FindAll(page, limit int) ([]*domain.User, error) {
+	var users []*domain.User
+	offset := (page - 1) * limit
+
+	err := r.db.Offset(offset).Limit(limit).Find(&users).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}

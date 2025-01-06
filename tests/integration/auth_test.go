@@ -136,33 +136,50 @@ func TestAuthFlow_AccountLocking(t *testing.T) {
 	cleanupTestDB(testDB)
 
 	// Register a test user first
-	registerResp := registerTestUser(t, app, "testuser3", "test3@example.com")
-	assert.Equal(t, fiber.StatusOK, registerResp.StatusCode)
+	registerReq := httptest.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(`{
+		"email": "test2@example.com",
+		"password": "Password123!",
+		"username": "test2"
+	}`))
+	registerReq.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(registerReq, -1)
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode)
 
-	// Try multiple failed login attempts
+	// Try to login with wrong password multiple times
 	for i := 0; i < 5; i++ {
-		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{
-			"email": "test3@example.com",
-			"password": "wrongpassword"
+		loginReq := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{
+			"email": "test2@example.com",
+			"password": "WrongPassword123!"
 		}`))
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := app.Test(req, -1)
-		assert.NoError(t, err)
-		assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+		loginReq.Header.Set("Content-Type", "application/json")
+		resp, err = app.Test(loginReq, -1)
+		require.NoError(t, err)
+
+		// All attempts should return 401 Unauthorized
+		require.Equal(t, 401, resp.StatusCode)
+
+		// Read response body
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		// Last attempt should indicate account is locked
+		if i == 4 {
+			require.Contains(t, string(body), "Account is locked")
+		}
 	}
 
-	// Next attempt should fail due to account being locked
-	req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{
-		"email": "test3@example.com",
-		"password": "Test123!"
+	// Try with correct password after account is locked
+	loginReq := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{
+		"email": "test2@example.com",
+		"password": "Password123!"
 	}`))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
-	assert.NoError(t, err)
-	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+	loginReq.Header.Set("Content-Type", "application/json")
+	resp, err = app.Test(loginReq, -1)
+	require.NoError(t, err)
+	require.Equal(t, 401, resp.StatusCode)
 
-	var result map[string]string
-	err = json.NewDecoder(resp.Body).Decode(&result)
-	assert.NoError(t, err)
-	assert.Contains(t, result["error"], "Account is locked")
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Contains(t, string(body), "Account is locked")
 }

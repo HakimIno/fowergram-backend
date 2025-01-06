@@ -7,6 +7,10 @@ type UserService interface {
 	GetUserByID(id uint) (*domain.User, error)
 	GetUserByEmail(email string) (*domain.User, error)
 	UpdateUser(user *domain.User) error
+	DeleteUser(id uint) error
+	GetUsers(page, limit int) ([]*domain.User, error)
+	GetUsersFromCache(cacheKey string) ([]*domain.User, error)
+	CacheUsers(cacheKey string, users []*domain.User) error
 }
 
 type PostService interface {

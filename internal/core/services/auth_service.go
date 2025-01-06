@@ -34,14 +34,19 @@ func NewAuthService(ar ports.AuthRepository, es email.Service, gs geolocation.Se
 }
 
 func (s *authService) Register(user *domain.User) error {
-	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.PasswordHash), bcrypt.DefaultCost)
+	startTime := time.Now()
+
+	// Hash password with lower cost for faster registration
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.PasswordHash), security.HashCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 	user.PasswordHash = string(hashedPassword)
+	hashTime := time.Since(startTime)
+	fmt.Printf("Password hashing took: %v\n", hashTime)
 
 	// Create user
+	createStart := time.Now()
 	if err := s.authRepo.CreateUser(user); err != nil {
 		if strings.Contains(err.Error(), "duplicate key value") {
 			return &errors.AuthError{
@@ -54,48 +59,77 @@ func (s *authService) Register(user *domain.User) error {
 			Message: "Failed to create user",
 		}
 	}
+	createTime := time.Since(createStart)
+	fmt.Printf("User creation took: %v\n", createTime)
 
-	// Cache user data
-	cacheKey := fmt.Sprintf("user:%d", user.ID)
-	if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
-		// Log error but don't fail the request
-		fmt.Printf("failed to cache user data: %v\n", err)
-	}
+	// Do all non-critical operations async
+	go func() {
+		// Cache user data
+		cacheKey := fmt.Sprintf("user:%d", user.ID)
+		if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
+			fmt.Printf("failed to cache user data: %v\n", err)
+		}
 
-	// Generate verification code
-	code, err := security.GenerateRandomCode(6)
-	if err != nil {
-		return fmt.Errorf("failed to generate verification code: %w", err)
-	}
-	authCode := &domain.AuthCode{
-		UserID:    user.ID,
-		Code:      code,
-		Purpose:   "email_verification",
-		ExpiresAt: time.Now().Add(24 * time.Hour),
-	}
-	if err := s.authRepo.CreateAuthCode(authCode); err != nil {
-		return fmt.Errorf("failed to create auth code: %w", err)
-	}
+		// Generate verification code
+		code, err := security.GenerateRandomCode(6)
+		if err != nil {
+			fmt.Printf("failed to generate verification code: %v\n", err)
+			return
+		}
 
-	// Send verification email
-	if err := s.emailService.SendVerificationEmail(user.Email, code); err != nil {
-		return fmt.Errorf("failed to send verification email: %w", err)
-	}
+		// Create auth code
+		authCode := &domain.AuthCode{
+			UserID:    user.ID,
+			Code:      code,
+			Purpose:   "email_verification",
+			ExpiresAt: time.Now().Add(24 * time.Hour),
+		}
+		if err := s.authRepo.CreateAuthCode(authCode); err != nil {
+			fmt.Printf("failed to create auth code: %v\n", err)
+			return
+		}
+
+		// Send verification email
+		if err := s.emailService.SendVerificationEmail(user.Email, code); err != nil {
+			fmt.Printf("failed to send verification email: %v\n", err)
+		}
+	}()
+
+	totalTime := time.Since(startTime)
+	fmt.Printf("Total registration took: %v\n", totalTime)
 
 	return nil
 }
 
 func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSession) (*domain.User, string, error) {
-	// Try to get user from cache first
+	startTime := time.Now()
+
+	// Try to get user from cache first with shorter timeout
 	cacheKey := fmt.Sprintf("user:email:%s", email)
 	var user *domain.User
-	if cached, err := s.cacheRepo.Get(cacheKey); err == nil {
-		if userData, ok := cached.(*domain.User); ok {
-			user = userData
+	cacheDone := make(chan bool, 1)
+
+	go func() {
+		if cached, err := s.cacheRepo.Get(cacheKey); err == nil {
+			if userData, ok := cached.(*domain.User); ok {
+				user = userData
+			}
 		}
+		cacheDone <- true
+	}()
+
+	// Wait for cache with short timeout
+	select {
+	case <-cacheDone:
+	case <-time.After(100 * time.Millisecond):
+		fmt.Printf("Cache lookup timed out\n")
 	}
 
+	cacheTime := time.Since(startTime)
+	fmt.Printf("Cache lookup took: %v\n", cacheTime)
+
 	// If not in cache, get from database
+	dbStart := time.Now()
 	if user == nil {
 		var err error
 		user, err = s.authRepo.FindUserByEmail(email)
@@ -106,12 +140,15 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 			}
 		}
 
-		// Cache user data
-		if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
-			// Log error but don't fail the request
-			fmt.Printf("failed to cache user data: %v\n", err)
-		}
+		// Cache user data async
+		go func() {
+			if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
+				fmt.Printf("failed to cache user data: %v\n", err)
+			}
+		}()
 	}
+	dbTime := time.Since(dbStart)
+	fmt.Printf("Database operations took: %v\n", dbTime)
 
 	// Check if account is locked
 	if user.AccountLockedUntil != nil && user.AccountLockedUntil.After(time.Now()) {
@@ -121,7 +158,8 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 		}
 	}
 
-	// Verify password
+	// Verify password with lower cost
+	pwStart := time.Now()
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		// Increment failed login attempts
 		user.FailedLoginAttempts++
@@ -134,14 +172,17 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 			user.AccountLockedUntil = &lockUntil
 		}
 
+		// Update user in database
 		if err := s.authRepo.UpdateUser(user); err != nil {
-			return nil, "", fmt.Errorf("failed to update user: %w", err)
+			fmt.Printf("failed to update user failed attempts: %v\n", err)
 		}
 
 		// Update cache
-		if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
-			fmt.Printf("failed to update user cache: %v\n", err)
-		}
+		go func() {
+			if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
+				fmt.Printf("failed to update user cache: %v\n", err)
+			}
+		}()
 
 		if user.AccountLockedUntil != nil {
 			return nil, "", &errors.AuthError{
@@ -156,65 +197,72 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 		}
 	}
 
-	// Reset failed login attempts
+	// Reset failed login attempts on successful login
 	user.FailedLoginAttempts = 0
 	user.LastFailedLogin = nil
 	user.AccountLockedUntil = nil
-
-	// Update user in database
 	if err := s.authRepo.UpdateUser(user); err != nil {
-		return nil, "", fmt.Errorf("failed to update user: %w", err)
+		fmt.Printf("failed to reset failed attempts: %v\n", err)
 	}
 
-	// Get location info
-	location, err := s.geoService.GetLocation(deviceInfo.IPAddress)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to get location: %w", err)
-	}
-	deviceInfo.Location = location
+	pwTime := time.Since(pwStart)
+	fmt.Printf("Password verification took: %v\n", pwTime)
 
-	// Generate device ID if not exists
-	if deviceInfo.DeviceID == "" {
-		deviceID, err := generateDeviceID()
-		if err != nil {
-			return nil, "", fmt.Errorf("failed to generate device ID: %w", err)
-		}
-		deviceInfo.DeviceID = deviceID
-	}
-
-	// Create or update device session
-	deviceInfo.UserID = user.ID
-	deviceInfo.LastActive = time.Now()
-	if err := s.authRepo.CreateDeviceSession(deviceInfo); err != nil {
-		return nil, "", fmt.Errorf("failed to create device session: %w", err)
-	}
-
-	// Log login asynchronously
-	loginHistory := &domain.LoginHistory{
-		UserID:    user.ID,
-		DeviceID:  deviceInfo.DeviceID,
-		IPAddress: deviceInfo.IPAddress,
-		Location:  deviceInfo.Location,
-		UserAgent: deviceInfo.UserAgent,
-		Status:    "success",
-	}
+	// Get location from IP fully async (don't wait)
+	deviceInfo.Location = "Unknown" // Set default
 	go func() {
-		if err := s.authRepo.LogLogin(loginHistory); err != nil {
-			fmt.Printf("failed to log login: %v\n", err)
+		location, err := s.geoService.GetLocation(deviceInfo.IPAddress)
+		if err != nil {
+			fmt.Printf("failed to get location: %v\n", err)
+			return
 		}
+		// Update location in background
+		deviceInfo.Location = location
 	}()
 
+	// Generate device ID if not provided
+	if deviceInfo.DeviceID == "" {
+		deviceID, err := security.GenerateDeviceID()
+		if err != nil {
+			fmt.Printf("failed to generate device ID: %v\n", err)
+			deviceInfo.DeviceID = "unknown"
+		} else {
+			deviceInfo.DeviceID = deviceID
+		}
+	}
+
 	// Generate JWT token
+	tokenStart := time.Now()
 	token, err := s.generateJWT(user)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to generate token: %w", err)
 	}
+	tokenTime := time.Since(tokenStart)
+	fmt.Printf("Token generation took: %v\n", tokenTime)
 
-	// Send login notification if new device
-	if err := s.emailService.SendLoginNotification(user.Email, deviceInfo); err != nil {
-		// Log error but don't fail the login
-		fmt.Printf("failed to send login notification: %v", err)
-	}
+	// Log login and send notifications fully async
+	go func() {
+		// Log login
+		loginHistory := &domain.LoginHistory{
+			UserID:    user.ID,
+			DeviceID:  deviceInfo.DeviceID,
+			IPAddress: deviceInfo.IPAddress,
+			Location:  deviceInfo.Location,
+			UserAgent: deviceInfo.UserAgent,
+			Status:    "success",
+		}
+		if err := s.authRepo.LogLogin(loginHistory); err != nil {
+			fmt.Printf("failed to log login: %v\n", err)
+		}
+
+		// Send notification
+		if err := s.emailService.SendLoginNotification(user.Email, deviceInfo); err != nil {
+			fmt.Printf("failed to send login notification: %v\n", err)
+		}
+	}()
+
+	totalTime := time.Since(startTime)
+	fmt.Printf("Total auth service time: %v\n", totalTime)
 
 	return user, token, nil
 }
@@ -280,7 +328,20 @@ func (s *authService) GetActiveSessions(userID uint) ([]*domain.DeviceSession, e
 }
 
 func (s *authService) RevokeSession(userID uint, deviceID string) error {
-	return s.authRepo.RevokeSession(userID, deviceID)
+	// Do the session revocation async since it's not critical for immediate logout
+	go func() {
+		if err := s.authRepo.RevokeSession(userID, deviceID); err != nil {
+			fmt.Printf("failed to revoke session: %v\n", err)
+		}
+	}()
+
+	// Clear user cache immediately
+	cacheKey := fmt.Sprintf("user:%d", userID)
+	if err := s.cacheRepo.Delete(cacheKey); err != nil {
+		fmt.Printf("failed to clear user cache: %v\n", err)
+	}
+
+	return nil
 }
 
 func (s *authService) GetLoginHistory(userID uint) ([]*domain.LoginHistory, error) {

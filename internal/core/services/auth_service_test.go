@@ -103,7 +103,7 @@ func TestAuthService_Register(t *testing.T) {
 			},
 			wantErr: true,
 			setup: func() {
-				mockRepo.On("CreateUser", mock.AnythingOfType("*domain.User")).Return(fmt.Errorf("duplicate email"))
+				mockRepo.On("CreateUser", mock.AnythingOfType("*domain.User")).Return(fmt.Errorf("duplicate key value"))
 			},
 		},
 	}
@@ -112,6 +112,7 @@ func TestAuthService_Register(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			mockRepo.ExpectedCalls = nil
 			mockEmail.ExpectedCalls = nil
+			mockCache.ExpectedCalls = nil
 			tt.setup()
 
 			err := service.Register(tt.user)
@@ -119,6 +120,11 @@ func TestAuthService_Register(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+				// Wait for async operations
+				time.Sleep(100 * time.Millisecond)
+				mockRepo.AssertExpectations(t)
+				mockEmail.AssertExpectations(t)
+				mockCache.AssertExpectations(t)
 			}
 		})
 	}

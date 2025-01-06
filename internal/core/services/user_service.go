@@ -37,32 +37,26 @@ func (s *userService) CreateUser(user *domain.User) error {
 }
 
 func (s *userService) GetUserByID(id uint) (*domain.User, error) {
-	// Try to get from cache first
+	// Try cache first
 	cacheKey := fmt.Sprintf("user:%d", id)
 	if cached, err := s.cacheRepo.Get(cacheKey); err == nil {
-		if userData, ok := cached.(map[string]interface{}); ok {
-			// Convert cached data to User struct
-			userBytes, err := json.Marshal(userData)
-			if err == nil {
-				var user domain.User
-				if err := json.Unmarshal(userBytes, &user); err == nil {
-					return &user, nil
-				}
-			}
+		if user, ok := cached.(*domain.User); ok {
+			return user, nil
 		}
 	}
 
-	// If not in cache or error, get from database
+	// Get from database
 	user, err := s.userRepo.FindByID(id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Cache the user data
-	if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
-		// Log error but don't fail the request
-		fmt.Printf("failed to cache user data: %v\n", err)
-	}
+	// Cache async
+	go func() {
+		if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
+			fmt.Printf("failed to cache user: %v\n", err)
+		}
+	}()
 
 	return user, nil
 }
@@ -98,24 +92,61 @@ func (s *userService) GetUserByEmail(email string) (*domain.User, error) {
 	return user, nil
 }
 
+func (s *userService) GetUsers(page, limit int) ([]*domain.User, error) {
+	return s.userRepo.FindAll(page, limit)
+}
+
+func (s *userService) GetUsersFromCache(cacheKey string) ([]*domain.User, error) {
+	cached, err := s.cacheRepo.Get(cacheKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert cached data back to users array
+	if data, ok := cached.([]byte); ok {
+		var users []*domain.User
+		if err := json.Unmarshal(data, &users); err != nil {
+			return nil, err
+		}
+		return users, nil
+	}
+
+	return nil, fmt.Errorf("invalid cache data type")
+}
+
+func (s *userService) CacheUsers(cacheKey string, users []*domain.User) error {
+	// Cache for 5 minutes since user list might change frequently
+	return s.cacheRepo.Set(cacheKey, users, 5*time.Minute)
+}
+
 func (s *userService) UpdateUser(user *domain.User) error {
 	if err := s.userRepo.Update(user); err != nil {
 		return err
 	}
 
-	// Update cache
-	cacheKey := fmt.Sprintf("user:%d", user.ID)
-	if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
-		// Log error but don't fail the request
-		fmt.Printf("failed to update user cache: %v\n", err)
+	// Clear cache async
+	go func() {
+		cacheKey := fmt.Sprintf("user:%d", user.ID)
+		if err := s.cacheRepo.Delete(cacheKey); err != nil {
+			fmt.Printf("failed to clear user cache: %v\n", err)
+		}
+	}()
+
+	return nil
+}
+
+func (s *userService) DeleteUser(id uint) error {
+	if err := s.userRepo.Delete(id); err != nil {
+		return err
 	}
 
-	// Update email cache
-	emailCacheKey := fmt.Sprintf("user:email:%s", user.Email)
-	if err := s.cacheRepo.Set(emailCacheKey, user, 24*time.Hour); err != nil {
-		// Log error but don't fail the request
-		fmt.Printf("failed to update user email cache: %v\n", err)
-	}
+	// Clear cache async
+	go func() {
+		cacheKey := fmt.Sprintf("user:%d", id)
+		if err := s.cacheRepo.Delete(cacheKey); err != nil {
+			fmt.Printf("failed to clear user cache: %v\n", err)
+		}
+	}()
 
 	return nil
 }

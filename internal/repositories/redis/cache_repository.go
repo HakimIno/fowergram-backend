@@ -8,38 +8,55 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type cacheRepository struct {
+type CacheRepository struct {
 	client *redis.Client
 }
 
-func NewCacheRepository(client *redis.Client) *cacheRepository {
-	return &cacheRepository{
+func NewCacheRepository(client *redis.Client) *CacheRepository {
+	// Set default timeouts
+	client.Options().ReadTimeout = 100 * time.Millisecond
+	client.Options().WriteTimeout = 100 * time.Millisecond
+	client.Options().PoolSize = 10
+	client.Options().MinIdleConns = 5
+	client.Options().PoolTimeout = 1 * time.Hour
+
+	return &CacheRepository{
 		client: client,
 	}
 }
 
-func (r *cacheRepository) Set(key string, value interface{}, ttl time.Duration) error {
+func (r *CacheRepository) Get(key string) (interface{}, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	val, err := r.client.Get(ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	var result interface{}
+	if err := json.Unmarshal([]byte(val), &result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (r *CacheRepository) Set(key string, value interface{}, expiration time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
-	return r.client.Set(context.Background(), key, data, ttl).Err()
+
+	return r.client.Set(ctx, key, data, expiration).Err()
 }
 
-func (r *cacheRepository) Get(key string) (interface{}, error) {
-	data, err := r.client.Get(context.Background(), key).Result()
-	if err != nil {
-		return nil, err
-	}
+func (r *CacheRepository) Delete(key string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
 
-	var value interface{}
-	if err := json.Unmarshal([]byte(data), &value); err != nil {
-		return nil, err
-	}
-
-	return value, nil
-}
-
-func (r *cacheRepository) Delete(key string) error {
-	return r.client.Del(context.Background(), key).Err()
+	return r.client.Del(ctx, key).Err()
 }

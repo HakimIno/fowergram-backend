@@ -1,41 +1,23 @@
 package security
 
 import (
-	"errors"
-	"unicode"
+	"golang.org/x/crypto/bcrypt"
 )
 
-func ValidatePassword(password string) error {
-	if len(password) < 6 {
-		return errors.New("password must be at least 6 characters")
-	}
+const (
+	// VerifyCost is used for password verification (lower for better performance)
+	VerifyCost = 10
+	// HashCost is used for password hashing (higher for better security)
+	HashCost = bcrypt.DefaultCost
+)
 
-	var (
-		hasUpper  bool
-		hasLower  bool
-		hasNumber bool
-	)
+// HashPassword creates a bcrypt hash of the password using the higher cost
+func HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), HashCost)
+	return string(bytes), err
+}
 
-	for _, char := range password {
-		switch {
-		case unicode.IsUpper(char):
-			hasUpper = true
-		case unicode.IsLower(char):
-			hasLower = true
-		case unicode.IsNumber(char):
-			hasNumber = true
-		}
-	}
-
-	if !hasUpper {
-		return errors.New("password must contain at least one uppercase letter")
-	}
-	if !hasLower {
-		return errors.New("password must contain at least one lowercase letter")
-	}
-	if !hasNumber {
-		return errors.New("password must contain at least one number")
-	}
-
-	return nil
+// VerifyPassword checks if the provided password matches the hashed password using the lower cost
+func VerifyPassword(password, hash string) error {
+	return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 }

@@ -6,6 +6,7 @@ import (
 	"fowergram/pkg/errors"
 
 	"fmt"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -77,18 +78,26 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
+	startTime := time.Now()
+
 	req := new(domain.LoginRequest)
 	if err := c.BodyParser(req); err != nil {
+		fmt.Printf("Body parsing error: %v\n", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request format",
 		})
 	}
+	parseTime := time.Since(startTime)
+	fmt.Printf("Request parsing took: %v\n", parseTime)
 
 	if err := h.validate.Struct(req); err != nil {
+		fmt.Printf("Validation error: %v\n", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request data",
 		})
 	}
+	validateTime := time.Since(startTime) - parseTime
+	fmt.Printf("Validation took: %v\n", validateTime)
 
 	// Create device info from request
 	deviceInfo := &domain.DeviceSession{
@@ -97,7 +106,11 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		UserAgent:  c.Get("User-Agent"),
 	}
 
+	loginStart := time.Now()
 	user, token, err := h.authService.Login(req.Email, req.Password, deviceInfo)
+	loginTime := time.Since(loginStart)
+	fmt.Printf("Auth service login took: %v\n", loginTime)
+
 	if err != nil {
 		switch e := err.(type) {
 		case *errors.AuthError:
@@ -123,6 +136,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			})
 		}
 	}
+
+	totalTime := time.Since(startTime)
+	fmt.Printf("Total login process took: %v\n", totalTime)
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"token": token,
