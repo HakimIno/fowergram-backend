@@ -2,6 +2,7 @@ package integration
 
 import (
 	"encoding/json"
+	"fowergram/tests/helpers"
 	"net/http/httptest"
 	"testing"
 
@@ -9,7 +10,7 @@ import (
 )
 
 func TestHealthEndpoints(t *testing.T) {
-	app := setupTestApp()
+	app := helpers.SetupTestApp()
 
 	t.Run("Ping Endpoint", func(t *testing.T) {
 		req := httptest.NewRequest("GET", "/ping", nil)
