@@ -91,6 +91,7 @@ func TestAuthService_Register(t *testing.T) {
 				mockRepo.On("CreateUser", mock.AnythingOfType("*domain.User")).Return(nil)
 				mockRepo.On("CreateAuthCode", mock.AnythingOfType("*domain.AuthCode")).Return(nil)
 				mockEmail.On("SendVerificationEmail", mock.Anything, mock.Anything).Return(nil)
+				mockCache.On("Set", mock.AnythingOfType("string"), mock.AnythingOfType("*domain.User"), mock.AnythingOfType("time.Duration")).Return(nil)
 			},
 		},
 		{

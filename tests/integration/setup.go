@@ -78,11 +78,15 @@ func setupTestApp() *fiber.App {
 }
 
 func setupTestDB() *gorm.DB {
-	// Get test database URL from environment or use default
-	dbURL := os.Getenv("TEST_DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "host=localhost user=test password=test dbname=test port=5432 sslmode=disable"
-	}
+	// Get test database URL from environment variables with fallback values
+	host := getEnv("TEST_DB_HOST", "localhost")
+	user := getEnv("TEST_DB_USER", "postgres")
+	password := getEnv("TEST_DB_PASSWORD", "postgres")
+	dbname := getEnv("TEST_DB_NAME", "fowergram_test")
+	port := getEnv("TEST_DB_PORT", "5432")
+
+	dbURL := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable",
+		host, user, password, dbname, port)
 
 	// Open database connection
 	db, err := gorm.Open(pgdriver.Open(dbURL), &gorm.Config{})
@@ -102,6 +106,14 @@ func setupTestDB() *gorm.DB {
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	return db
+}
+
+// Helper function to get environment variables with fallback
+func getEnv(key, fallback string) string {
+	if value, exists := os.LookupEnv(key); exists {
+		return value
+	}
+	return fallback
 }
 
 func cleanupTestDB(db *gorm.DB) {
