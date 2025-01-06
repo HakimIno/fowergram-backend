@@ -46,9 +46,11 @@ spec:
             - name: PORT
               value: "8080"
             - name: REDIS_HOST
-              value: "redis-service"
+              value: "redis"
             - name: REDIS_PORT
               value: "6379"
+            - name: REDIS_PASSWORD
+              value: ""
             - name: GIN_MODE
               value: "release"
           readinessProbe:
