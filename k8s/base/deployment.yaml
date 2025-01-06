@@ -14,17 +14,18 @@ spec:
       labels:
         app: fowergram-api
     spec:
+      serviceAccountName: fowergram-sa
+      nodeSelector:
+        cloud.google.com/gke-nodepool: cloudsql-pool
       containers:
         - name: fowergram-api
           image: asia-southeast1-docker.pkg.dev/fowergram-backend/fowergram-repo/api:latest
           ports:
             - containerPort: 8080
+              name: http
           env:
             - name: DB_HOST
-              valueFrom:
-                secretKeyRef:
-                  name: fowergram-secrets
-                  key: db-host
+              value: "cloudsql-proxy"
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
@@ -42,17 +43,17 @@ spec:
                   key: db-name
             - name: DB_PORT
               value: "5432"
-            - name: GIN_MODE
-              value: "release"
             - name: PORT
               value: "8080"
             - name: REDIS_HOST
-              value: "localhost"
+              value: "redis-service"
             - name: REDIS_PORT
               value: "6379"
+            - name: GIN_MODE
+              value: "release"
           readinessProbe:
             httpGet:
-              path: /health # เปลี่ยนจาก /health เป็น /ping
+              path: /ping
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
@@ -60,7 +61,7 @@ spec:
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /health
+              path: /ping
               port: 8080
             initialDelaySeconds: 45
             periodSeconds: 15
@@ -72,10 +73,3 @@ spec:
             limits:
               cpu: 200m
               memory: 256Mi
-          securityContext:
-            allowPrivilegeEscalation: false
-            runAsNonRoot: true
-            runAsUser: 1000
-            capabilities:
-              drop:
-                - ALL
