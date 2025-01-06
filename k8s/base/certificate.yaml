@@ -1,0 +1,7 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: fowergram-certificate
+spec:
+  domains:
+    - api.fowergram.online 

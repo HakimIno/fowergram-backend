@@ -4,3 +4,8 @@ kind: Kustomization
 resources:
   - deployment.yaml
   - service.yaml
+  - service-account.yaml
+  - cloudsql-proxy.yaml
+  - redis.yaml
+  - ingress.yaml
+  - certificate.yaml
