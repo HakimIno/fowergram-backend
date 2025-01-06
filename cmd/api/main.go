@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"fowergram/config"
 	"fowergram/internal/core/services"
@@ -39,14 +40,36 @@ func main() {
 	userHandler := handlers.NewUserHandler(userService)
 	authHandler := handlers.NewAuthHandler(authService)
 
-	// Setup Fiber app
-	app := fiber.New()
+	// Setup Fiber app with custom config
+	app := fiber.New(fiber.Config{
+		DisableStartupMessage: true,
+	})
 
 	// Middleware
 	app.Use(logger.New())
 	app.Use(cors.New())
 
-	// Routes
+	// Health routes must be registered first
+	app.Get("/ping", func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"status": "ok",
+			"time":   time.Now(),
+		})
+	})
+
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"status": "ok",
+			"time":   time.Now(),
+			"services": fiber.Map{
+				"api":   "up",
+				"db":    "up",
+				"redis": "up",
+			},
+		})
+	})
+
+	// API routes
 	api := app.Group("/api/v1")
 
 	// Auth routes
@@ -63,5 +86,7 @@ func main() {
 	// Start server
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)
 	log.Printf("Server is running on %s", addr)
-	log.Fatal(app.Listen(addr))
+	if err := app.Listen(addr); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
 }

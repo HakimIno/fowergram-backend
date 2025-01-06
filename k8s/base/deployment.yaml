@@ -6,93 +6,90 @@ metadata:
     app: fowergram-api
 spec:
   replicas: 1
-  progressDeadlineSeconds: 120
+  progressDeadlineSeconds: 300
+  selector:
+    matchLabels:
+      app: fowergram-api
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
-  selector:
-    matchLabels:
-      app: fowergram-api
   template:
     metadata:
       labels:
         app: fowergram-api
-      annotations:
-        kubectl.kubernetes.io/default-container: fowergram-api
     spec:
       serviceAccountName: fowergram-sa
-      terminationGracePeriodSeconds: 30
       nodeSelector:
         cloud.google.com/gke-nodepool: cloudsql-pool
       containers:
-        - name: fowergram-api
-          image: asia-southeast1-docker.pkg.dev/fowergram-backend/fowergram-repo/api:latest
-          ports:
-            - containerPort: 8080
-              name: http
-          lifecycle:
-            preStop:
-              exec:
-                command: ["/bin/sh", "-c", "sleep 5"]
-          startupProbe:
-            httpGet:
-              path: /ping
-              port: 8080
-            failureThreshold: 3
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /ping
-              port: 8080
-            initialDelaySeconds: 2
-            periodSeconds: 3
-            timeoutSeconds: 1
-            failureThreshold: 3
-            successThreshold: 1
-          livenessProbe:
-            httpGet:
-              path: /ping
-              port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 1
-            failureThreshold: 2
-          env:
-            - name: DB_HOST
-              value: "cloudsql-proxy"
-            - name: DB_USER
-              valueFrom:
-                secretKeyRef:
-                  name: fowergram-secrets
-                  key: db-user
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: fowergram-secrets
-                  key: db-password
-            - name: DB_NAME
-              valueFrom:
-                secretKeyRef:
-                  name: fowergram-secrets
-                  key: db-name
-            - name: DB_PORT
-              value: "5432"
-            - name: PORT
-              value: "8080"
-            - name: REDIS_HOST
-              value: "redis-service"
-            - name: REDIS_PORT
-              value: "6379"
-            - name: REDIS_PASSWORD
-              value: ""
-            - name: GIN_MODE
-              value: "release"
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 300m
-              memory: 256Mi
+      - name: fowergram-api
+        image: asia-southeast1-docker.pkg.dev/fowergram-backend/fowergram-repo/api:latest
+        ports:
+        - name: http
+          containerPort: 8080
+        env:
+        - name: DB_HOST
+          value: cloudsql-proxy
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: fowergram-secrets
+              key: db-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: fowergram-secrets
+              key: db-password
+        - name: DB_NAME
+          valueFrom:
+            secretKeyRef:
+              name: fowergram-secrets
+              key: db-name
+        - name: DB_PORT
+          value: "5432"
+        - name: PORT
+          value: "8080"
+        - name: REDIS_HOST
+          value: redis-service
+        - name: REDIS_PORT
+          value: "6379"
+        - name: REDIS_PASSWORD
+          value: ""
+        - name: GIN_MODE
+          value: release
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 300m
+            memory: 256Mi
+        startupProbe:
+          httpGet:
+            path: /ping
+            port: 8080
+          failureThreshold: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ping
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 1
+          failureThreshold: 3
+        lifecycle:
+          preStop:
+            exec:
+              command: ["/bin/sh", "-c", "sleep 5"]
+      terminationGracePeriodSeconds: 30
