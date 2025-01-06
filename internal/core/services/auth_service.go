@@ -18,14 +18,16 @@ type authService struct {
 	authRepo     ports.AuthRepository
 	emailService email.Service
 	geoService   geolocation.Service
+	cacheRepo    ports.CacheRepository
 	jwtSecret    string
 }
 
-func NewAuthService(ar ports.AuthRepository, es email.Service, gs geolocation.Service, secret string) ports.AuthService {
+func NewAuthService(ar ports.AuthRepository, es email.Service, gs geolocation.Service, cr ports.CacheRepository, secret string) ports.AuthService {
 	return &authService{
 		authRepo:     ar,
 		emailService: es,
 		geoService:   gs,
+		cacheRepo:    cr,
 		jwtSecret:    secret,
 	}
 }
@@ -41,6 +43,13 @@ func (s *authService) Register(user *domain.User) error {
 	// Create user
 	if err := s.authRepo.CreateUser(user); err != nil {
 		return fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Cache user data
+	cacheKey := fmt.Sprintf("user:%d", user.ID)
+	if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("failed to cache user data: %v\n", err)
 	}
 
 	// Generate verification code
@@ -67,9 +76,28 @@ func (s *authService) Register(user *domain.User) error {
 }
 
 func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSession) (*domain.User, string, error) {
-	user, err := s.authRepo.FindUserByEmail(email)
-	if err != nil {
-		return nil, "", errors.ErrInvalidCredentials
+	// Try to get user from cache first
+	cacheKey := fmt.Sprintf("user:email:%s", email)
+	var user *domain.User
+	if cached, err := s.cacheRepo.Get(cacheKey); err == nil {
+		if userData, ok := cached.(*domain.User); ok {
+			user = userData
+		}
+	}
+
+	// If not in cache, get from database
+	if user == nil {
+		var err error
+		user, err = s.authRepo.FindUserByEmail(email)
+		if err != nil {
+			return nil, "", errors.ErrInvalidCredentials
+		}
+
+		// Cache user data
+		if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
+			// Log error but don't fail the request
+			fmt.Printf("failed to cache user data: %v\n", err)
+		}
 	}
 
 	// Check if account is locked
@@ -92,6 +120,11 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 
 		if err := s.authRepo.UpdateUser(user); err != nil {
 			return nil, "", fmt.Errorf("failed to update user: %w", err)
+		}
+
+		// Update cache
+		if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
+			fmt.Printf("failed to update user cache: %v\n", err)
 		}
 
 		return nil, "", errors.ErrInvalidCredentials
@@ -125,7 +158,7 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 		return nil, "", fmt.Errorf("failed to create device session: %w", err)
 	}
 
-	// Log login
+	// Log login asynchronously
 	loginHistory := &domain.LoginHistory{
 		UserID:    user.ID,
 		DeviceID:  deviceInfo.DeviceID,
@@ -134,9 +167,11 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 		UserAgent: deviceInfo.UserAgent,
 		Status:    "success",
 	}
-	if err := s.authRepo.LogLogin(loginHistory); err != nil {
-		return nil, "", fmt.Errorf("failed to log login: %w", err)
-	}
+	go func() {
+		if err := s.authRepo.LogLogin(loginHistory); err != nil {
+			fmt.Printf("failed to log login: %v\n", err)
+		}
+	}()
 
 	// Generate JWT token
 	token, err := s.generateJWT(user)
