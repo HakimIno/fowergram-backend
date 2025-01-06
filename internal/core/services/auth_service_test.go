@@ -47,11 +47,31 @@ type MockGeoService struct {
 
 // Implement all GeoService methods...
 
+type MockCacheRepo struct {
+	mock.Mock
+}
+
+func (m *MockCacheRepo) Set(key string, value interface{}, expiration time.Duration) error {
+	args := m.Called(key, value, expiration)
+	return args.Error(0)
+}
+
+func (m *MockCacheRepo) Get(key string) (interface{}, error) {
+	args := m.Called(key)
+	return args.Get(0), args.Error(1)
+}
+
+func (m *MockCacheRepo) Delete(key string) error {
+	args := m.Called(key)
+	return args.Error(0)
+}
+
 func TestAuthService_Register(t *testing.T) {
 	mockRepo := new(MockAuthRepo)
 	mockEmail := new(MockEmailService)
 	mockGeo := new(MockGeoService)
-	service := NewAuthService(mockRepo, mockEmail, mockGeo, "secret")
+	mockCache := new(MockCacheRepo)
+	service := NewAuthService(mockRepo, mockEmail, mockGeo, mockCache, "secret")
 
 	tests := []struct {
 		name    string
@@ -107,7 +127,8 @@ func TestAuthService_Login(t *testing.T) {
 	mockRepo := new(MockAuthRepo)
 	mockEmail := new(MockEmailService)
 	mockGeo := new(MockGeoService)
-	service := NewAuthService(mockRepo, mockEmail, mockGeo, "secret")
+	mockCache := new(MockCacheRepo)
+	service := NewAuthService(mockRepo, mockEmail, mockGeo, mockCache, "secret")
 
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.DefaultCost)
 
@@ -203,7 +224,8 @@ func TestAuthService_ValidateLoginCode(t *testing.T) {
 	mockRepo := new(MockAuthRepo)
 	mockEmail := new(MockEmailService)
 	mockGeo := new(MockGeoService)
-	service := NewAuthService(mockRepo, mockEmail, mockGeo, "secret")
+	mockCache := new(MockCacheRepo)
+	service := NewAuthService(mockRepo, mockEmail, mockGeo, mockCache, "secret")
 
 	tests := []struct {
 		name    string
@@ -252,7 +274,8 @@ func TestAuthService_InitiateAccountRecovery(t *testing.T) {
 	mockRepo := new(MockAuthRepo)
 	mockEmail := new(MockEmailService)
 	mockGeo := new(MockGeoService)
-	service := NewAuthService(mockRepo, mockEmail, mockGeo, "secret")
+	mockCache := new(MockCacheRepo)
+	service := NewAuthService(mockRepo, mockEmail, mockGeo, mockCache, "secret")
 
 	tests := []struct {
 		name    string

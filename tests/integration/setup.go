@@ -1,45 +1,25 @@
 package integration
 
 import (
-	"fowergram/config"
+	"fmt"
 	"fowergram/internal/core/domain"
 	"fowergram/internal/core/services"
 	"fowergram/internal/handlers"
-	"fowergram/internal/middleware"
 	"fowergram/internal/repositories/postgres"
+	redisrepo "fowergram/internal/repositories/redis"
 	"fowergram/pkg/email"
 	"fowergram/pkg/geolocation"
-
+	"os"
+	"strings"
 	"time"
 
-	"strings"
-
-	"fmt"
-
-	"os"
-
 	"github.com/gofiber/fiber/v2"
+	"github.com/redis/go-redis/v9"
 	pgdriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 func setupTestApp() *fiber.App {
-	// Load test config with correct database connection
-	cfg := &config.Config{
-		DB: setupTestDB(),
-		JWT: config.JWTConfig{
-			Secret: "test-secret",
-		},
-		Email: config.EmailConfig{
-			APIKey:      "test-key",
-			SenderEmail: "test@example.com",
-			SenderName:  "Test",
-		},
-		Geo: config.GeoConfig{
-			APIKey: "test-key",
-		},
-	}
-
 	// Initialize test database
 	db := setupTestDB()
 	if err := db.AutoMigrate(
@@ -52,28 +32,24 @@ func setupTestApp() *fiber.App {
 		panic(err)
 	}
 
-	// Initialize repositories
-	authRepo := postgres.NewAuthRepository(db)
-	emailService := email.NewEmailService(cfg.Email.APIKey, cfg.Email.SenderEmail, cfg.Email.SenderName)
-	geoService := geolocation.NewGeoService(cfg.Geo.APIKey)
+	// Initialize Redis client for testing
+	redisClient := redis.NewClient(&redis.Options{
+		Addr: "localhost:6379",
+		DB:   0,
+	})
 
-	// Initialize services
-	authService := services.NewAuthService(authRepo, emailService, geoService, cfg.JWT.Secret)
+	// Initialize repositories and services
+	authRepo := postgres.NewAuthRepository(db)
+	emailService := email.NewEmailService("test-key", "test@example.com", "Test")
+	geoService := geolocation.NewGeoService("test-key")
+	cacheRepo := redisrepo.NewCacheRepository(redisClient)
+	authService := services.NewAuthService(authRepo, emailService, geoService, cacheRepo, "test-secret")
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
 
-	// Initialize middleware
-	securityMiddleware := middleware.NewSecurityMiddleware()
-
-	// Initialize app with increased timeout
-	app := fiber.New(fiber.Config{
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-	})
-
-	// Apply middleware
-	app.Use(securityMiddleware.RateLimiter())
+	// Setup Fiber app
+	app := fiber.New()
 
 	// Setup routes
 	api := app.Group("/api")
@@ -82,74 +58,63 @@ func setupTestApp() *fiber.App {
 	auth.Post("/register", authHandler.Register)
 	auth.Post("/login", authHandler.Login)
 
-	// Protected routes
-	users := v1.Group("/users")
-	users.Use(func(c *fiber.Ctx) error {
-		auth := c.Get("Authorization")
-		if auth == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Missing authorization header",
-			})
-		}
-
-		token := strings.TrimPrefix(auth, "Bearer ")
-		user, err := authService.ValidateToken(token)
-		if err != nil {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid token",
-			})
-		}
-
-		c.Locals("user", user)
-		return c.Next()
-	})
-	users.Get("/me", func(c *fiber.Ctx) error {
-		user := c.Locals("user").(*domain.User)
-		return c.JSON(user)
-	})
-
 	return app
 }
 
 func setupTestDB() *gorm.DB {
-	// Get database connection parameters from environment variables
-	host := getEnv("DB_HOST", "localhost")
-	user := getEnv("DB_USER", "postgres")
-	password := getEnv("DB_PASSWORD", "postgres")
-	dbName := getEnv("DB_NAME", "fowergram_test")
-	sslmode := "disable"
-
-	// เชื่อมต่อกับ postgres โดยไม่ระบุ database
-	dsn := fmt.Sprintf("host=%s user=%s password=%s sslmode=%s",
-		host, user, password, sslmode)
-	db, err := gorm.Open(pgdriver.Open(dsn), &gorm.Config{})
-	if err != nil {
-		panic(err)
+	// Get test database URL from environment or use default
+	dbURL := os.Getenv("TEST_DATABASE_URL")
+	if dbURL == "" {
+		dbURL = "host=localhost user=test password=test dbname=test port=5432 sslmode=disable"
 	}
 
-	// Kill all connections to the test database
-	db.Exec("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = ?", dbName)
-
-	// สร้าง database ถ้ายังไม่มี
-	db.Exec("DROP DATABASE IF EXISTS " + dbName)
-	db.Exec("CREATE DATABASE " + dbName)
-
-	// เชื่อมต่อกับ database ที่สร้างใหม่
-	dsn = fmt.Sprintf("host=%s user=%s password=%s dbname=%s sslmode=%s",
-		host, user, password, dbName, sslmode)
-	testDB, err := gorm.Open(pgdriver.Open(dsn), &gorm.Config{})
+	// Open database connection
+	db, err := gorm.Open(pgdriver.Open(dbURL), &gorm.Config{})
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("failed to connect to test database: %v", err))
 	}
 
-	return testDB
+	// Get underlying SQL DB
+	sqlDB, err := db.DB()
+	if err != nil {
+		panic(fmt.Sprintf("failed to get underlying SQL DB: %v", err))
+	}
+
+	// Set connection pool settings
+	sqlDB.SetMaxIdleConns(10)
+	sqlDB.SetMaxOpenConns(100)
+	sqlDB.SetConnMaxLifetime(time.Hour)
+
+	return db
 }
 
-// getEnv returns environment variable value or default if not set
-func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value != "" {
-		return value
+func cleanupTestDB(db *gorm.DB) {
+	// Get all table names
+	var tableNames []string
+	sqlDB, err := db.DB()
+	if err != nil {
+		panic(fmt.Sprintf("failed to get underlying SQL DB: %v", err))
 	}
-	return defaultValue
+
+	rows, err := sqlDB.Query("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+	if err != nil {
+		panic(fmt.Sprintf("failed to get table names: %v", err))
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var tableName string
+		if err := rows.Scan(&tableName); err != nil {
+			panic(fmt.Sprintf("failed to scan table name: %v", err))
+		}
+		tableNames = append(tableNames, tableName)
+	}
+
+	// Truncate all tables
+	for _, tableName := range tableNames {
+		if strings.HasPrefix(tableName, "test_") {
+			continue
+		}
+		db.Exec(fmt.Sprintf("TRUNCATE TABLE %s CASCADE", tableName))
+	}
 }

@@ -37,6 +37,12 @@ type GeoConfig struct {
 	APIKey string
 }
 
+type RedisConfig struct {
+	Host     string
+	Port     string
+	Password string
+}
+
 func Load() (*Config, error) {
 	viper.AutomaticEnv()
 
