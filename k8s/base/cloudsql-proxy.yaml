@@ -19,9 +19,10 @@ spec:
         image: gcr.io/cloudsql-docker/gce-proxy:1.33.2
         command:
           - "/cloud_sql_proxy"
-          - "-instances=fowergram-backend:asia-southeast1:fowergram-db=tcp:5432"
+          - "-instances=fowergram-backend:asia-southeast1:fowergram-db=tcp:0.0.0.0:5432"
           - "-use_http_health_check"
-          - "-http-port=8090"
+          - "-health_check_port=8090"
+          - "-ip_address_types=PRIVATE,PUBLIC"
         ports:
           - containerPort: 5432
             name: db
