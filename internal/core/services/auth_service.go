@@ -311,14 +311,6 @@ func (s *authService) generateJWT(user *domain.User) (string, error) {
 	return security.GenerateJWT(user.ID, s.jwtSecret, 15*time.Minute)
 }
 
-func generateDeviceID() (string, error) {
-	deviceID, err := security.GenerateDeviceID()
-	if err != nil {
-		return "", fmt.Errorf("failed to generate device ID: %w", err)
-	}
-	return deviceID, nil
-}
-
 func (s *authService) ValidateLoginCode(userID uint, code string) error {
 	return s.authRepo.ValidateAuthCode(userID, code, "login_verification")
 }

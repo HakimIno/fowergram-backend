@@ -2,9 +2,7 @@ package integration
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
-	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -13,19 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// Helper functions
-func registerTestUser(t *testing.T, app *fiber.App, username, email string) *http.Response {
-	req := httptest.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(fmt.Sprintf(`{
-		"username": "%s",
-		"email": "%s",
-		"password": "Test123!"
-	}`, username, email)))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := app.Test(req, -1)
-	assert.NoError(t, err)
-	return resp
-}
 
 func TestAuthFlow(t *testing.T) {
 	app := setupTestApp()
