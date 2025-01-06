@@ -1,0 +1,70 @@
+name: Deploy to GKE
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  PROJECT_ID: fowergram-backend
+  GKE_CLUSTER: fowergram-cluster
+  GKE_ZONE: asia-southeast1-a
+  IMAGE: asia-southeast1-docker.pkg.dev/fowergram-backend/fowergram-repo/api
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+
+    - name: Run tests
+      run: go test -v ./...
+
+    - name: Run linter
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+
+    - name: Build and push Docker image
+      run: |
+        docker build -t $IMAGE:$GITHUB_SHA .
+        docker push $IMAGE:$GITHUB_SHA
+
+    - name: Deploy to GKE
+      run: |
+        kubectl apply -f k8s/base/deployment.yaml
+        kubectl apply -f k8s/base/service.yaml
+        kubectl set image deployment/fowergram-api fowergram-api=$IMAGE:$GITHUB_SHA
+        kubectl rollout status deployment/fowergram-api --timeout=300s
+
+    - name: Health check
+      run: |
+        echo "Waiting for service to be ready..."
+        sleep 30  # Wait for service to be ready
+        
+        # Get service IP
+        SERVICE_IP=$(kubectl get service fowergram-api -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+        
+        # Check ping endpoint
+        PING_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/ping)
+        if [ "$PING_STATUS" != "200" ]; then
+          echo "Ping endpoint check failed with status $PING_STATUS"
+          exit 1
+        fi
+        
+        # Check health endpoint
+        HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$SERVICE_IP/health)
+        if [ "$HEALTH_STATUS" != "200" ]; then
+          echo "Health endpoint check failed with status $HEALTH_STATUS"
+          exit 1
+        fi
+        
+        echo "Health checks passed successfully" 
