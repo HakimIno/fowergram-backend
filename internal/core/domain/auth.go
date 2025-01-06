@@ -18,13 +18,17 @@ type DeviceSession struct {
 
 type LoginHistory struct {
 	ID        uint      `json:"id" gorm:"primaryKey"`
-	UserID    uint      `json:"user_id"`
-	DeviceID  string    `json:"device_id"`
-	IPAddress string    `json:"ip_address"`
-	Location  string    `json:"location"`
-	UserAgent string    `json:"user_agent"`
-	Status    string    `json:"status"`
-	CreatedAt time.Time `json:"created_at"`
+	UserID    uint      `json:"user_id" gorm:"column:user_id"`
+	DeviceID  string    `json:"device_id" gorm:"column:device_id"`
+	IPAddress string    `json:"ip_address" gorm:"column:ip_address"`
+	Location  string    `json:"location" gorm:"column:location"`
+	UserAgent string    `json:"user_agent" gorm:"column:user_agent"`
+	Status    string    `json:"status" gorm:"column:status"`
+	CreatedAt time.Time `json:"created_at" gorm:"column:created_at"`
+}
+
+func (LoginHistory) TableName() string {
+	return "login_history"
 }
 
 type AuthCode struct {
