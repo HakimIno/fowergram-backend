@@ -6,7 +6,7 @@ metadata:
     app: fowergram-api
 spec:
   replicas: 1
-  progressDeadlineSeconds: 600
+  progressDeadlineSeconds: 120
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -19,9 +19,11 @@ spec:
     metadata:
       labels:
         app: fowergram-api
+      annotations:
+        kubectl.kubernetes.io/default-container: fowergram-api
     spec:
       serviceAccountName: fowergram-sa
-      terminationGracePeriodSeconds: 60
+      terminationGracePeriodSeconds: 30
       nodeSelector:
         cloud.google.com/gke-nodepool: cloudsql-pool
       containers:
@@ -33,30 +35,30 @@ spec:
           lifecycle:
             preStop:
               exec:
-                command: ["/bin/sh", "-c", "sleep 10"]
+                command: ["/bin/sh", "-c", "sleep 5"]
           startupProbe:
             httpGet:
               path: /ping
               port: 8080
-            failureThreshold: 30
+            failureThreshold: 3
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /ping
               port: 8080
-            initialDelaySeconds: 5
-            periodSeconds: 5
-            timeoutSeconds: 2
+            initialDelaySeconds: 2
+            periodSeconds: 3
+            timeoutSeconds: 1
             failureThreshold: 3
             successThreshold: 1
           livenessProbe:
             httpGet:
               path: /ping
               port: 8080
-            initialDelaySeconds: 15
-            periodSeconds: 20
-            timeoutSeconds: 2
-            failureThreshold: 3
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 1
+            failureThreshold: 2
           env:
             - name: DB_HOST
               value: "cloudsql-proxy"
