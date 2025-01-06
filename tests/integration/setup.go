@@ -11,6 +11,7 @@ import (
 	"fowergram/pkg/geolocation"
 	"os"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -18,6 +19,21 @@ import (
 	pgdriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
+
+var testDB *gorm.DB
+
+func TestMain(m *testing.M) {
+	// Setup
+	testDB = setupTestDB()
+
+	// Run tests
+	code := m.Run()
+
+	// Cleanup
+	cleanupTestDB(testDB)
+
+	os.Exit(code)
+}
 
 func setupTestApp() *fiber.App {
 	// Initialize test database
