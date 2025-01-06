@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
@@ -51,6 +52,19 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Set connection pool settings
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+
+	// Set max number of open connections
+	sqlDB.SetMaxOpenConns(25)
+	// Set max number of idle connections
+	sqlDB.SetMaxIdleConns(10)
+	// Set max lifetime of connections
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
 	// Setup Redis
 	rdb := redis.NewClient(&redis.Options{
