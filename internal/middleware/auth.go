@@ -6,7 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
-func AuthRequired(jwtSecret string) fiber.Handler {
+func ValidateAuth(jwtSecret string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		token := c.Get("Authorization")
 		if token == "" {

@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"fowergram/internal/core/domain"
@@ -42,7 +43,16 @@ func (s *authService) Register(user *domain.User) error {
 
 	// Create user
 	if err := s.authRepo.CreateUser(user); err != nil {
-		return fmt.Errorf("failed to create user: %w", err)
+		if strings.Contains(err.Error(), "duplicate key value") {
+			return &errors.AuthError{
+				Code:    "AUTH003",
+				Message: "Email or username already exists",
+			}
+		}
+		return &errors.AuthError{
+			Code:    "AUTH004",
+			Message: "Failed to create user",
+		}
 	}
 
 	// Cache user data
@@ -90,7 +100,10 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 		var err error
 		user, err = s.authRepo.FindUserByEmail(email)
 		if err != nil {
-			return nil, "", errors.ErrInvalidCredentials
+			return nil, "", &errors.AuthError{
+				Code:    "AUTH001",
+				Message: "Invalid email or password",
+			}
 		}
 
 		// Cache user data
@@ -102,7 +115,10 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 
 	// Check if account is locked
 	if user.AccountLockedUntil != nil && user.AccountLockedUntil.After(time.Now()) {
-		return nil, "", errors.ErrAccountLocked
+		return nil, "", &errors.AuthError{
+			Code:    "AUTH002",
+			Message: "Account is locked due to too many failed attempts",
+		}
 	}
 
 	// Verify password
@@ -127,13 +143,28 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 			fmt.Printf("failed to update user cache: %v\n", err)
 		}
 
-		return nil, "", errors.ErrInvalidCredentials
+		if user.AccountLockedUntil != nil {
+			return nil, "", &errors.AuthError{
+				Code:    "AUTH002",
+				Message: "Account is locked due to too many failed attempts",
+			}
+		}
+
+		return nil, "", &errors.AuthError{
+			Code:    "AUTH001",
+			Message: "Invalid email or password",
+		}
 	}
 
 	// Reset failed login attempts
 	user.FailedLoginAttempts = 0
 	user.LastFailedLogin = nil
 	user.AccountLockedUntil = nil
+
+	// Update user in database
+	if err := s.authRepo.UpdateUser(user); err != nil {
+		return nil, "", fmt.Errorf("failed to update user: %w", err)
+	}
 
 	// Get location info
 	location, err := s.geoService.GetLocation(deviceInfo.IPAddress)

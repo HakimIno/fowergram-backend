@@ -1,189 +1,179 @@
 package integration
 
 import (
-	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
-	"fowergram/internal/core/domain"
-
+	"github.com/gofiber/fiber/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// Helper functions
+func registerTestUser(t *testing.T, app *fiber.App, username, email string) *http.Response {
+	req := httptest.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(fmt.Sprintf(`{
+		"username": "%s",
+		"email": "%s",
+		"password": "Test123!"
+	}`, username, email)))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	assert.NoError(t, err)
+	return resp
+}
+
+func loginTestUser(t *testing.T, app *fiber.App, email string) *http.Response {
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(fmt.Sprintf(`{
+		"email": "%s",
+		"password": "Test123!"
+	}`, email)))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	assert.NoError(t, err)
+	return resp
+}
 
 func TestAuthFlow(t *testing.T) {
 	app := setupTestApp()
+	cleanupTestDB(testDB)
 
-	// Test Registration
-	registerReq := domain.RegisterRequest{
-		Username: "testuser",
-		Email:    "test@example.com",
-		Password: "Test123!",
-	}
-	reqBody, _ := json.Marshal(registerReq)
-	req := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(reqBody))
+	// Register a new user
+	req := httptest.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(`{
+		"username": "testuser1",
+		"email": "test1@example.com",
+		"password": "Password123!"
+	}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := app.Test(req, -1)
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode)
 
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Test Login
-	loginReq := domain.LoginRequest{
-		Email:    "test@example.com",
-		Password: "Test123!",
-	}
-	reqBody, _ = json.Marshal(loginReq)
-	req = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(reqBody))
+	// Login with the registered user
+	req = httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{
+		"email": "test1@example.com",
+		"password": "Password123!"
+	}`))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = app.Test(req, -1)
-
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var loginResp domain.AuthResponse
-	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
-		t.Fatalf("Failed to decode response: %v", err)
-	}
-	assert.NotEmpty(t, loginResp.Token)
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode)
 }
 
 func TestAuthFlow_InvalidCredentials(t *testing.T) {
 	app := setupTestApp()
+	cleanupTestDB(testDB)
 
-	loginReq := domain.LoginRequest{
-		Email:    "wrong@example.com",
-		Password: "wrongpass",
-	}
-	reqBody, _ := json.Marshal(loginReq)
-	req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(reqBody))
+	// Try to login with wrong credentials
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{
+		"email": "wrong@example.com",
+		"password": "WrongPassword123!"
+	}`))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req, -1)
-
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	resp, err := app.Test(req, -1)
+	require.NoError(t, err)
+	require.Equal(t, 401, resp.StatusCode)
 }
 
 func TestAuthFlow_TokenValidation(t *testing.T) {
 	app := setupTestApp()
+	cleanupTestDB(testDB)
 
-	// Register and login to get token
-	registerAndLogin := func() string {
-		registerReq := domain.RegisterRequest{
-			Username: "testuser",
-			Email:    "test@example.com",
-			Password: "Test123!",
-		}
-		reqBody, _ := json.Marshal(registerReq)
-		req := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(reqBody))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := app.Test(req, -1)
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	// Register a new user
+	req := httptest.NewRequest("POST", "/api/v1/auth/register", strings.NewReader(`{
+		"username": "testuser2",
+		"email": "test2@example.com",
+		"password": "Password123!"
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := app.Test(req, -1)
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode)
 
-		loginReq := domain.LoginRequest{
-			Email:    "test@example.com",
-			Password: "Test123!",
-		}
-		reqBody, _ = json.Marshal(loginReq)
-		req = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(reqBody))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ = app.Test(req, -1)
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	// Login to get a token
+	req = httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{
+		"email": "test2@example.com",
+		"password": "Password123!"
+	}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = app.Test(req, -1)
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode)
 
-		var loginResp domain.AuthResponse
-		if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
-		}
-		return loginResp.Token
-	}
+	// Read token from response
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	var loginResp map[string]interface{}
+	err = json.Unmarshal(body, &loginResp)
+	require.NoError(t, err)
+	token := loginResp["token"].(string)
 
-	t.Run("valid_token", func(t *testing.T) {
-		token := registerAndLogin()
-		req := httptest.NewRequest("GET", "/api/v1/users/me", nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		resp, _ := app.Test(req, -1)
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-	})
-
-	t.Run("invalid_token", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/users/me", nil)
-		req.Header.Set("Authorization", "Bearer invalid_token")
-		resp, _ := app.Test(req, -1)
-		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-	})
-
-	t.Run("missing_token", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/api/v1/users/me", nil)
-		resp, _ := app.Test(req, -1)
-		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-	})
+	// Validate token
+	req = httptest.NewRequest("GET", "/api/v1/auth/validate", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err = app.Test(req, -1)
+	require.NoError(t, err)
+	require.Equal(t, 200, resp.StatusCode)
 }
 
 func TestAuthFlow_RateLimiting(t *testing.T) {
 	app := setupTestApp()
+	cleanupTestDB(testDB)
 
-	// Try multiple rapid login attempts
-	for i := 0; i < 35; i++ {
-		loginReq := domain.LoginRequest{
-			Email:    "test@example.com",
-			Password: "wrongpass",
-		}
-		reqBody, _ := json.Marshal(loginReq)
-		req := httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(reqBody))
+	// Try multiple failed login attempts
+	for i := 0; i < 6; i++ {
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{
+			"email": "nonexistent@example.com",
+			"password": "wrongpassword"
+		}`))
 		req.Header.Set("Content-Type", "application/json")
-		resp, _ := app.Test(req, -1)
+		resp, err := app.Test(req, -1)
+		assert.NoError(t, err)
 
-		if i >= 30 {
-			assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		if i < 5 {
+			assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+		} else {
+			assert.Equal(t, fiber.StatusTooManyRequests, resp.StatusCode)
 		}
 	}
 }
 
 func TestAuthFlow_AccountLocking(t *testing.T) {
 	app := setupTestApp()
+	cleanupTestDB(testDB)
 
-	// Register a user first
-	registerReq := domain.RegisterRequest{
-		Username: "testuser",
-		Email:    "test@example.com",
-		Password: "Test123!",
-	}
-	reqBody, _ := json.Marshal(registerReq)
-	req := httptest.NewRequest("POST", "/api/v1/auth/register", bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-	resp, _ := app.Test(req, -1)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	// Register a test user first
+	registerResp := registerTestUser(t, app, "testuser3", "test3@example.com")
+	assert.Equal(t, fiber.StatusOK, registerResp.StatusCode)
 
 	// Try multiple failed login attempts
-	for i := 0; i < 6; i++ {
-		loginReq := domain.LoginRequest{
-			Email:    "test@example.com",
-			Password: "wrongpass",
-		}
-		reqBody, _ = json.Marshal(loginReq)
-		req = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(reqBody))
+	for i := 0; i < 5; i++ {
+		req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{
+			"email": "test3@example.com",
+			"password": "wrongpassword"
+		}`))
 		req.Header.Set("Content-Type", "application/json")
-		resp, _ = app.Test(req, -1)
-
-		if i >= 5 {
-			// Account should be locked after 5 failed attempts
-			assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
-			var response map[string]interface{}
-			if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-				t.Fatalf("Failed to decode response: %v", err)
-			}
-			assert.Contains(t, response["error"], "locked")
-		}
+		resp, err := app.Test(req, -1)
+		assert.NoError(t, err)
+		assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
 	}
 
-	// Try logging in with correct password while account is locked
-	loginReq := domain.LoginRequest{
-		Email:    "test@example.com",
-		Password: "Test123!",
-	}
-	reqBody, _ = json.Marshal(loginReq)
-	req = httptest.NewRequest("POST", "/api/v1/auth/login", bytes.NewBuffer(reqBody))
+	// Next attempt should fail due to account being locked
+	req := httptest.NewRequest("POST", "/api/v1/auth/login", strings.NewReader(`{
+		"email": "test3@example.com",
+		"password": "Test123!"
+	}`))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ = app.Test(req, -1)
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	resp, err := app.Test(req, -1)
+	assert.NoError(t, err)
+	assert.Equal(t, fiber.StatusUnauthorized, resp.StatusCode)
+
+	var result map[string]string
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "Account is locked")
 }

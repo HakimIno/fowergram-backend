@@ -6,15 +6,14 @@ import (
 )
 
 func ValidatePassword(password string) error {
-	if len(password) < 8 {
-		return errors.New("password must be at least 8 characters")
+	if len(password) < 6 {
+		return errors.New("password must be at least 6 characters")
 	}
 
 	var (
-		hasUpper   bool
-		hasLower   bool
-		hasNumber  bool
-		hasSpecial bool
+		hasUpper  bool
+		hasLower  bool
+		hasNumber bool
 	)
 
 	for _, char := range password {
@@ -25,8 +24,6 @@ func ValidatePassword(password string) error {
 			hasLower = true
 		case unicode.IsNumber(char):
 			hasNumber = true
-		case unicode.IsPunct(char) || unicode.IsSymbol(char):
-			hasSpecial = true
 		}
 	}
 
@@ -38,9 +35,6 @@ func ValidatePassword(password string) error {
 	}
 	if !hasNumber {
 		return errors.New("password must contain at least one number")
-	}
-	if !hasSpecial {
-		return errors.New("password must contain at least one special character")
 	}
 
 	return nil

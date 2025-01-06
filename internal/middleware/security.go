@@ -19,23 +19,25 @@ func NewSecurityMiddleware() *SecurityMiddleware {
 // RateLimiter returns rate limiting middleware
 func (m *SecurityMiddleware) RateLimiter() fiber.Handler {
 	return limiter.New(limiter.Config{
-		Max:        30,              // 30 requests
+		Max:        5,               // 5 requests
 		Expiration: 1 * time.Minute, // per 1 minute
 		KeyGenerator: func(c *fiber.Ctx) string {
-			return c.IP() // Use IP address as key
+			// Use IP address and path as key
+			return c.IP() + ":" + c.Path()
 		},
 		LimitReached: func(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-				"error": "Rate limit exceeded",
+				"error": "Too many attempts, please try again later",
 			})
 		},
+		SkipFailedRequests: false, // Count failed requests towards the limit
 	})
 }
 
 // CORS returns CORS middleware
 func (m *SecurityMiddleware) CORS() fiber.Handler {
 	return cors.New(cors.Config{
-		AllowOrigins:     "http://localhost:3000, https://yourdomain.com",
+		AllowOrigins:     "http://localhost:3000, https://api.fowergram.online/metrics",
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		ExposeHeaders:    "Content-Length",
