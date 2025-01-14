@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS login_histories (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    device_id VARCHAR(255) NOT NULL,
+    ip_address VARCHAR(255) NOT NULL,
+    location VARCHAR(255) NOT NULL,
+    user_agent VARCHAR(255) NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+); 

@@ -4,9 +4,7 @@ import (
 	"fowergram/internal/core/domain"
 	"fowergram/internal/core/ports"
 	"fowergram/pkg/errors"
-
-	"fmt"
-	"time"
+	"fowergram/pkg/response"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
@@ -27,122 +25,108 @@ func NewAuthHandler(as ports.AuthService) *AuthHandler {
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	req := new(domain.RegisterRequest)
 	if err := c.BodyParser(req); err != nil {
-		fmt.Printf("BodyParser error: %v\n", err)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request format",
+		return response.InvalidFormat(c, err, map[string]string{
+			"username": "string",
+			"email":    "string",
+			"password": "string",
 		})
 	}
 
 	if err := h.validate.Struct(req); err != nil {
-		fmt.Printf("Validation error: %v\n", err)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request data",
-		})
+		validationErrors := err.(validator.ValidationErrors)
+		errorDetails := make([]map[string]string, 0)
+		for _, e := range validationErrors {
+			errorDetails = append(errorDetails, map[string]string{
+				"field": e.Field(),
+				"tag":   e.Tag(),
+				"value": e.Value().(string),
+			})
+		}
+		return response.ValidationError(c, errorDetails)
 	}
 
 	user := &domain.User{
 		Username:     req.Username,
 		Email:        req.Email,
-		PasswordHash: req.Password, // Service will hash this
+		PasswordHash: req.Password,
 	}
 
 	if err := h.authService.Register(user); err != nil {
-		fmt.Printf("Register error: %v\n", err)
 		switch e := err.(type) {
 		case *errors.AuthError:
 			if e.Code == "AUTH003" {
-				return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-					"error": e.Message,
-					"code":  e.Code,
+				return response.BadRequest(c, e.Code, e.Message, map[string]interface{}{
+					"field":  "email",
+					"reason": "already_exists",
 				})
 			}
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": e.Message,
-				"code":  e.Code,
-			})
+			return response.BadRequest(c, e.Code, e.Message, nil)
 		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Failed to register user",
-			})
+			return response.InternalError(c)
 		}
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message": "Registration successful",
-		"user": fiber.Map{
-			"id":       user.ID,
-			"username": user.Username,
-			"email":    user.Email,
+	return response.Created(c, "REGISTRATION_SUCCESS", "Registration successful", map[string]interface{}{
+		"user": map[string]interface{}{
+			"id":         user.ID,
+			"username":   user.Username,
+			"email":      user.Email,
+			"created_at": user.CreatedAt,
 		},
 	})
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
-	startTime := time.Now()
-
 	req := new(domain.LoginRequest)
 	if err := c.BodyParser(req); err != nil {
-		fmt.Printf("Body parsing error: %v\n", err)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request format",
+		return response.InvalidFormat(c, err, map[string]string{
+			"email":    "string",
+			"password": "string",
 		})
 	}
-	parseTime := time.Since(startTime)
-	fmt.Printf("Request parsing took: %v\n", parseTime)
 
 	if err := h.validate.Struct(req); err != nil {
-		fmt.Printf("Validation error: %v\n", err)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request data",
-		})
+		validationErrors := err.(validator.ValidationErrors)
+		errorDetails := make([]map[string]string, 0)
+		for _, e := range validationErrors {
+			errorDetails = append(errorDetails, map[string]string{
+				"field": e.Field(),
+				"tag":   e.Tag(),
+				"value": e.Value().(string),
+			})
+		}
+		return response.ValidationError(c, errorDetails)
 	}
-	validateTime := time.Since(startTime) - parseTime
-	fmt.Printf("Validation took: %v\n", validateTime)
 
-	// Create device info from request
 	deviceInfo := &domain.DeviceSession{
 		DeviceType: c.Get("User-Agent"),
 		IPAddress:  c.IP(),
 		UserAgent:  c.Get("User-Agent"),
 	}
 
-	loginStart := time.Now()
 	user, token, err := h.authService.Login(req.Email, req.Password, deviceInfo)
-	loginTime := time.Since(loginStart)
-	fmt.Printf("Auth service login took: %v\n", loginTime)
-
 	if err != nil {
 		switch e := err.(type) {
 		case *errors.AuthError:
-			if e.Code == "AUTH002" { // Account locked error
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"error": "Account is locked due to too many failed attempts",
-					"code":  e.Code,
+			if e.Code == "AUTH002" {
+				return response.Unauthorized(c, e.Code, "Account is locked due to too many failed attempts", map[string]interface{}{
+					"locked": true,
 				})
 			}
-			if e.Code == "AUTH001" { // Invalid credentials
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"error": "Invalid email or password",
-					"code":  e.Code,
-				})
-			}
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": e.Message,
-				"code":  e.Code,
-			})
+			return response.Unauthorized(c, e.Code, e.Message, nil)
 		default:
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error": "Internal server error",
-			})
+			return response.InternalError(c)
 		}
 	}
 
-	totalTime := time.Since(startTime)
-	fmt.Printf("Total login process took: %v\n", totalTime)
-
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"token": token,
-		"user":  user,
+	return response.Success(c, "LOGIN_SUCCESS", "Login successful", map[string]interface{}{
+		"user": map[string]interface{}{
+			"id":         user.ID,
+			"email":      user.Email,
+			"created_at": user.CreatedAt,
+		},
+		"token":       token,
+		"device_info": deviceInfo,
 	})
 }
 
@@ -151,19 +135,12 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	user := c.Locals("user").(*domain.User)
 
 	if err := h.authService.RevokeSession(user.ID, deviceID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to logout",
-		})
+		return response.InternalError(c)
 	}
 
-	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message": "Logged out successfully",
-	})
+	return response.Success(c, "LOGOUT_SUCCESS", "Logged out successfully", nil)
 }
 
-// ValidateToken handles token validation requests
 func (h *AuthHandler) ValidateToken(c *fiber.Ctx) error {
-	// Token validation is handled by the auth middleware
-	// If we reach here, the token is valid
-	return c.SendStatus(fiber.StatusOK)
+	return response.Success(c, "TOKEN_VALID", "Token is valid", nil)
 }

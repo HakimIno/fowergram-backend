@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -9,10 +10,15 @@ import (
 	"time"
 
 	"fowergram/config"
+	"fowergram/internal/chat/broker/redpanda"
+	"fowergram/internal/chat/handler"
+	"fowergram/internal/chat/repository/mongodb"
+	"fowergram/internal/chat/service"
 	"fowergram/internal/core/services"
 	"fowergram/internal/handlers"
 	"fowergram/internal/repositories/postgres"
 	"fowergram/internal/repositories/redis"
+	"fowergram/internal/routes"
 	"fowergram/pkg/email"
 	"fowergram/pkg/geolocation"
 
@@ -20,13 +26,37 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
+
+func setupMongoDB(cfg config.MongoDBConfig) (*mongo.Database, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cfg.URI))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := client.Ping(ctx, nil); err != nil {
+		return nil, err
+	}
+
+	return client.Database(cfg.Database), nil
+}
 
 func main() {
 	// Load config
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	// Setup MongoDB
+	mongoDB, err := setupMongoDB(cfg.MongoDB)
+	if err != nil {
+		log.Fatalf("Failed to connect to MongoDB: %v", err)
 	}
 
 	// Setup repositories
@@ -44,7 +74,7 @@ func main() {
 	userHandler := handlers.NewUserHandler(userService)
 	authHandler := handlers.NewAuthHandler(authService)
 
-	// Setup Fiber app with custom config
+	// Setup Fiber app
 	app := fiber.New(fiber.Config{
 		DisableStartupMessage: true,
 		ReadTimeout:           10 * time.Second,
@@ -57,39 +87,24 @@ func main() {
 	app.Use(logger.New())
 	app.Use(cors.New())
 
-	// Health routes must be registered first
-	app.Get("/ping", func(c *fiber.Ctx) error {
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"time":   time.Now(),
-		})
-	})
-
-	app.Get("/health", func(c *fiber.Ctx) error {
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"status": "ok",
-			"time":   time.Now(),
-			"services": fiber.Map{
-				"api":   "up",
-				"db":    "up",
-				"redis": "up",
-			},
-		})
-	})
-
-	// API routes
+	// Setup routes
+	routes.SetupHealthRoutes(app)
 	api := app.Group("/api/v1")
+	routes.SetupAuthRoutes(api, authHandler)
+	routes.SetupUserRoutes(api, userHandler)
 
-	// Auth routes
-	auth := api.Group("/auth")
-	auth.Post("/register", authHandler.Register)
-	auth.Post("/login", authHandler.Login)
-	auth.Post("/logout", authHandler.Logout)
+	// Setup chat dependencies and routes
+	redpandaBroker, err := redpanda.NewRedpandaBroker([]string{cfg.Redpanda.Broker})
+	if err != nil {
+		log.Fatalf("Failed to connect to Redpanda: %v", err)
+	}
+	defer redpandaBroker.Close()
 
-	// User routes
-	users := api.Group("/users")
-	users.Get("/:id", userHandler.GetUser)
-	users.Get("/", userHandler.GetUsers)
+	chatRepo := mongodb.NewChatRepository(mongoDB)
+	wsManager := service.NewWebSocketManager(cfg.Redis)
+	chatService := service.NewChatService(chatRepo, wsManager, redpandaBroker)
+	chatHandler := handler.NewChatHandler(chatService, wsManager)
+	routes.SetupChatRoutes(api, chatHandler)
 
 	// Graceful shutdown
 	c := make(chan os.Signal, 1)

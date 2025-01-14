@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .auth-section {
+            width: 300px;
+        }
+        .chat-section {
+            flex-grow: 1;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 8px;
+            border-radius: 5px;
+            max-width: 70%;
+        }
+        .sent {
+            background-color: #e3f2fd;
+            margin-left: auto;
+        }
+        .received {
+            background-color: #f5f5f5;
+        }
+        .system {
+            background-color: #fff3e0;
+            max-width: 100%;
+            text-align: center;
+            font-style: italic;
+        }
+        .error {
+            background-color: #ffebee;
+            max-width: 100%;
+            text-align: center;
+            color: #c62828;
+        }
+        .chat-input {
+            display: flex;
+            gap: 10px;
+        }
+        .chat-input input {
+            flex-grow: 1;
+            padding: 8px;
+        }
+        #userList {
+            margin-top: 20px;
+            border: 1px solid #ccc;
+            padding: 10px;
+        }
+        .user-item {
+            padding: 5px;
+            cursor: pointer;
+        }
+        .user-item:hover {
+            background-color: #f0f0f0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="auth-section">
+            <h2>Authentication</h2>
+            <!-- Register Form -->
+            <div class="form-group">
+                <h3>Register</h3>
+                <input type="text" id="regUsername" placeholder="Username">
+                <input type="email" id="regEmail" placeholder="Email">
+                <input type="password" id="regPassword" placeholder="Password">
+                <button onclick="register()">Register</button>
+            </div>
+
+            <!-- Login Form -->
+            <div class="form-group">
+                <h3>Login</h3>
+                <input type="email" id="loginEmail" placeholder="Email">
+                <input type="password" id="loginPassword" placeholder="Password">
+                <button onclick="login()">Login</button>
+            </div>
+
+            <!-- User List -->
+            <div id="userList">
+                <h3>Users</h3>
+                <div id="userListContent"></div>
+            </div>
+        </div>
+
+        <div class="chat-section">
+            <h2>Chat</h2>
+            <div id="messages"></div>
+            <div class="chat-input">
+                <input type="text" id="messageInput" placeholder="Type a message" onkeypress="handleKeyPress(event)">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws;
+        let currentUserId = null;
+        let currentChatId = null;
+        let authToken = null;
+        const API_BASE = 'http://localhost:8080/api/v1';
+        const messagesDiv = document.getElementById('messages');
+
+        // Auth Functions
+        async function register() {
+            const username = document.getElementById('regUsername').value;
+            const email = document.getElementById('regEmail').value;
+            const password = document.getElementById('regPassword').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, email, password }),
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    appendMessage('System', 'Registration successful! Please login.', 'system');
+                } else {
+                    throw new Error(data.error || 'Registration failed');
+                }
+            } catch (error) {
+                appendMessage('System', `Registration error: ${error.message}`, 'error');
+            }
+        }
+
+        async function login() {
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+
+            try {
+                const response = await fetch(`${API_BASE}/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+
+                const data = await response.json();
+                console.log('Login response:', data);
+
+                if (response.ok) {
+                    authToken = data.token;
+                    currentUserId = data.user.id.toString();
+                    appendMessage('System', `Login successful! User ID: ${currentUserId}`, 'system');
+                    console.log('Auth token:', authToken);
+                    connectWebSocket();
+                    fetchUsers();
+                } else {
+                    throw new Error(data.error || 'Login failed');
+                }
+            } catch (error) {
+                appendMessage('System', `Login error: ${error.message}`, 'error');
+            }
+        }
+
+        // WebSocket Functions
+        function connectWebSocket() {
+            if (ws) {
+                ws.close();
+            }
+
+            const wsUrl = `ws://localhost:8080/api/v1/chat/ws`;
+            console.log('Connecting to WebSocket...');
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected, sending auth message...');
+                
+                // Send auth message immediately after connection
+                ws.send(JSON.stringify({
+                    type: 'auth',
+                    token: authToken
+                }));
+                
+                appendMessage('System', 'Connected to chat server', 'system');
+                startPing();
+            };
+            
+            ws.onmessage = (event) => {
+                console.log('Received message:', event.data);
+                try {
+                    const message = JSON.parse(event.data);
+                    
+                    if (message.type === 'pong') {
+                        lastPongTime = Date.now();
+                        return;
+                    }
+                    
+                    if (message.error) {
+                        appendMessage('System', `Error: ${message.error}`, 'error');
+                        return;
+                    }
+                    
+                    appendMessage(message.sender_id, message.content, 'received');
+                } catch (error) {
+                    console.error('Error parsing message:', error);
+                    appendMessage('System', 'Error parsing message from server', 'error');
+                }
+            };
+            
+            ws.onclose = (event) => {
+                console.log('WebSocket closed:', event);
+                appendMessage('System', `Disconnected from chat server (code: ${event.code})`, 'system');
+                stopPing();
+                
+                // Try to reconnect after 3 seconds if not intentionally closed
+                if (event.code !== 1000) {
+                    setTimeout(connectWebSocket, 3000);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                appendMessage('System', 'Error connecting to chat server', 'error');
+            };
+        }
+
+        let pingInterval;
+        let lastPongTime = Date.now();
+
+        function startPing() {
+            stopPing();
+            pingInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    // Check if we haven't received a pong for more than 30 seconds
+                    if (Date.now() - lastPongTime > 30000) {
+                        console.log('No pong received for 30 seconds, reconnecting...');
+                        ws.close();
+                        return;
+                    }
+                    
+                    ws.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 15000); // Send ping every 15 seconds
+        }
+
+        function stopPing() {
+            if (pingInterval) {
+                clearInterval(pingInterval);
+                pingInterval = null;
+            }
+        }
+
+        // Chat Functions
+        async function createChat(otherUserId) {
+            try {
+                if (!authToken) {
+                    throw new Error('Not authenticated. Please login first.');
+                }
+
+                console.log('Creating chat with:', {
+                    currentUserId,
+                    otherUserId,
+                    authToken: authToken.substring(0, 10) + '...'
+                });
+
+                const chatData = {
+                    members: [currentUserId.toString(), otherUserId.toString()],
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                };
+
+                console.log('Request body:', chatData);
+
+                const response = await fetch(`${API_BASE}/chat`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`,
+                    },
+                    body: JSON.stringify(chatData),
+                });
+
+                const data = await response.json();
+                console.log('Response:', data);
+
+                if (!response.ok) {
+                    throw new Error(data.error || 'Failed to create chat');
+                }
+
+                if (!data.id) {
+                    throw new Error('Invalid chat ID received from server');
+                }
+
+                currentChatId = data.id;
+                appendMessage('System', `Started chat with user ${otherUserId}`, 'system');
+
+                // Only reconnect WebSocket if not connected
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    connectWebSocket();
+                }
+            } catch (error) {
+                appendMessage('System', `Error creating chat: ${error.message}`, 'error');
+            }
+        }
+
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                appendMessage('System', 'Not connected to chat server', 'error');
+                return;
+            }
+            
+            const messageInput = document.getElementById('messageInput');
+            if (!messageInput.value || !currentChatId) {
+                return;
+            }
+            
+            const message = {
+                type: 'chat',
+                data: {
+                    chat_id: currentChatId,
+                    content: messageInput.value,
+                    message_type: "text",
+                    sender_id: currentUserId,
+                    created_at: new Date().toISOString()
+                }
+            };
+            
+            console.log('Sending message:', message);
+            ws.send(JSON.stringify(message));
+            appendMessage(currentUserId, messageInput.value, 'sent');
+            messageInput.value = '';
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // User List Functions
+        async function fetchUsers() {
+            try {
+                const response = await fetch(`${API_BASE}/users`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                    },
+                });
+
+                const data = await response.json();
+                if (response.ok) {
+                    displayUsers(data);
+                } else {
+                    throw new Error(data.error || 'Failed to fetch users');
+                }
+            } catch (error) {
+                appendMessage('System', `Error fetching users: ${error.message}`, 'error');
+            }
+        }
+
+        function displayUsers(users) {
+            const userListContent = document.getElementById('userListContent');
+            userListContent.innerHTML = '';
+
+            users.forEach(user => {
+                if (user.id !== currentUserId) {
+                    const userDiv = document.createElement('div');
+                    userDiv.className = 'user-item';
+                    userDiv.textContent = user.username;
+                    userDiv.onclick = () => createChat(user.id);
+                    userListContent.appendChild(userDiv);
+                }
+            });
+        }
+
+        function appendMessage(sender, content, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = `${sender}: ${content}`;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html> 

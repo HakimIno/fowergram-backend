@@ -70,5 +70,3 @@ func (s *emailService) SendPasswordResetEmail(to, code string) error {
 	_, err := s.client.Send(message)
 	return err
 }
-
-// ... implement other methods similarly

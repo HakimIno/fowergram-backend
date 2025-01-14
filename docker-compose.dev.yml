@@ -17,6 +17,51 @@ services:
       timeout: 5s
       retries: 5
 
+  mongodb:
+    image: mongo:6-jammy
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: fowergram
+      MONGO_INITDB_ROOT_PASSWORD: fowergram
+      MONGO_INITDB_DATABASE: fowergram
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - fowergram-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redpanda:
+    image: vectorized/redpanda:v22.3.11
+    command:
+      - redpanda
+      - start
+      - --smp
+      - "1"
+      - --reserve-memory
+      - 0M
+      - --overprovisioned
+      - --node-id
+      - "0"
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    networks:
+      - fowergram-network
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   migrate:
     image: migrate/migrate
     volumes:
@@ -46,32 +91,53 @@ services:
       dockerfile: Dockerfile.dev
     volumes:
       - .:/app
-    command: ["go", "run", "cmd/api/main.go"]
+    ports:
+      - "8080:8080"
     environment:
       - DB_HOST=postgres
       - DB_USER=fowergram
       - DB_PASSWORD=fowergram
       - DB_NAME=fowergram
+      - JWT_SECRET=your_jwt_secret_here
+      - MONGODB_URI=mongodb://fowergram:fowergram@mongodb:27017
+      - MONGODB_DATABASE=fowergram
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
+      - REDPANDA_BROKER=redpanda:29092
       - PORT=8080
-      - JWT_SECRET=your-secret-key
-    ports:
-      - "8080:8080"
-    networks:
-      - fowergram-network
+      # Debug flags
+      - GO111MODULE=on
+      - GODEBUG=netdns=cgo
+      - GIN_MODE=debug
     depends_on:
       postgres:
         condition: service_healthy
+      mongodb:
+        condition: service_healthy
       redis:
+        condition: service_healthy
+      redpanda:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    networks:
+      - fowergram-network
+
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   command: tunnel --no-autoupdate run --url http://app:8080
+  #   environment:
+  #     - TUNNEL_TOKEN=eyJhIjoiYjgwZDA4NjlmM2ZiZjRmNjhlZTljMmEzMGU2M2MwOTEiLCJ0IjoiMDczMDFkZWUtMWQxMS00YjE4LTk4Y2QtNDc0NTIyYTFlN2RiIiwicyI6Ik5EWmtNRGN5TldRdE5XTXlOaTAwWTJKaUxXSmhPVEV0TlRGa1lqSTBNalU0TkRRMSJ9
+  #   networks:
+  #     - fowergram-network
+  #   depends_on:
+  #     - app
 
 networks:
   fowergram-network:
     driver: bridge
 
 volumes:
-  postgres_data: 
+  postgres_data:
+  mongodb_data: 
