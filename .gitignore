@@ -33,3 +33,6 @@ bin/
 tmp/
 
 .env key.json
+
+.env
+.env.*

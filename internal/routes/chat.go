@@ -2,13 +2,18 @@ package routes
 
 import (
 	"fowergram/internal/chat/handler"
+	"fowergram/internal/middleware"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
 )
 
-func SetupChatRoutes(api fiber.Router, chatHandler *handler.ChatHandler) {
+func SetupChatRoutes(api fiber.Router, chatHandler *handler.ChatHandler, jwtSecret string) {
 	chat := api.Group("/chat")
+
+	// Add auth middleware to all chat routes
+	chat.Use(middleware.ValidateAuth(jwtSecret))
+
 	chat.Use("/ws", func(c *fiber.Ctx) error {
 		if websocket.IsWebSocketUpgrade(c) {
 			c.Locals("allowed", true)

@@ -16,6 +16,7 @@ func toDomainChat(chat *repository.Chat) *domain.Chat {
 		CreatedBy: chat.CreatedBy,
 		CreatedAt: chat.CreatedAt,
 		UpdatedAt: chat.UpdatedAt,
+		IsPrivate: chat.IsPrivate,
 	}
 }
 
@@ -27,6 +28,7 @@ func toRepositoryChat(chat *domain.Chat) repository.Chat {
 		CreatedBy: chat.CreatedBy,
 		CreatedAt: chat.CreatedAt,
 		UpdatedAt: chat.UpdatedAt,
+		IsPrivate: chat.IsPrivate,
 	}
 }
 

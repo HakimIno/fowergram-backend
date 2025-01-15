@@ -20,7 +20,9 @@ const (
 			type text,
 			created_by text,
 			created_at timestamp,
-			updated_at timestamp
+			updated_at timestamp,
+			is_private boolean,
+			members list<text>
 		);
 
 		CREATE TABLE IF NOT EXISTS chat_members (
@@ -31,6 +33,8 @@ const (
 			updated_at timestamp,
 			PRIMARY KEY ((chat_id), user_id)
 		);
+
+		CREATE INDEX IF NOT EXISTS chat_members_user_id_idx ON chat_members (user_id);
 
 		CREATE TABLE IF NOT EXISTS chat_messages (
 			conversation_id text,

@@ -44,6 +44,8 @@ type Chat struct {
 	CreatedBy string    `json:"created_by"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	IsPrivate bool      `json:"is_private"`
+	Members   []string  `json:"members"`
 }
 
 type ChatMember struct {
@@ -74,6 +76,7 @@ type ChatRepository interface {
 	CreateChat(ctx context.Context, chat Chat) error
 	GetChat(ctx context.Context, chatID string) (*Chat, error)
 	GetChatMembers(ctx context.Context, chatID string) ([]ChatMember, error)
+	GetUserChats(ctx context.Context, userID string) ([]ChatMember, error)
 	AddChatMember(ctx context.Context, member ChatMember) error
 	RemoveChatMember(ctx context.Context, chatID, userID string) error
 	UpdateChatMemberRole(ctx context.Context, chatID, userID string, role ChatRole) error

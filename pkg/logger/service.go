@@ -50,9 +50,9 @@ func NewLogger(level LogLevel) *ZerologService {
 				case "debug":
 					l = "🔍  DEBUG"
 				case "info":
-					l = "ℹ️   INFO"
+					l = "🐳   INFO"
 				case "warn":
-					l = "⚠️   WARN"
+					l = "🎃   WARN"
 				case "error":
 					l = "❌  ERROR"
 				case "fatal":

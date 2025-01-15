@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"fowergram/internal/chat/broker"
@@ -40,7 +41,7 @@ func (s *ChatService) HandleMessage(ctx context.Context, msg *domain.Message) er
 func (s *ChatService) CreateChat(ctx context.Context, chat *domain.Chat) error {
 	repoChat := toRepositoryChat(chat)
 	if err := s.repo.CreateChat(ctx, repoChat); err != nil {
-		return err
+		return fmt.Errorf("failed to create chat in repository: %w", err)
 	}
 
 	for _, userID := range chat.Members {
@@ -53,7 +54,7 @@ func (s *ChatService) CreateChat(ctx context.Context, chat *domain.Chat) error {
 		}
 		repoMember := toRepositoryChatMember(member)
 		if err := s.repo.AddChatMember(ctx, repoMember); err != nil {
-			return err
+			return fmt.Errorf("failed to add chat member %s: %w", userID, err)
 		}
 	}
 
@@ -92,7 +93,7 @@ func (s *ChatService) GetChat(ctx context.Context, chatID string) (*domain.Chat,
 }
 
 func (s *ChatService) GetUserChats(ctx context.Context, userID string) ([]*domain.Chat, error) {
-	members, err := s.repo.GetChatMembers(ctx, userID)
+	members, err := s.repo.GetUserChats(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +104,9 @@ func (s *ChatService) GetUserChats(ctx context.Context, userID string) ([]*domai
 		if err != nil {
 			return nil, err
 		}
-		chats = append(chats, chat)
+		if chat != nil {
+			chats = append(chats, chat)
+		}
 	}
 
 	return chats, nil

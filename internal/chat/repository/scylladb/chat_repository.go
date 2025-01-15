@@ -35,7 +35,7 @@ var notificationsTable = table.New(table.Metadata{
 
 var chatsTable = table.New(table.Metadata{
 	Name:    "chats",
-	Columns: []string{"id", "name", "type", "created_by", "created_at", "updated_at"},
+	Columns: []string{"id", "name", "type", "created_by", "created_at", "updated_at", "is_private", "members"},
 	PartKey: []string{"id"},
 })
 
@@ -69,7 +69,10 @@ func NewChatRepository(hosts []string, keyspace string) (*ChatRepository, error)
 func (r *ChatRepository) CreateChat(ctx context.Context, chat repository.Chat) error {
 	stmt, names := chatsTable.Insert()
 	q := r.session.Query(stmt, names).BindStruct(chat)
-	return q.ExecRelease()
+	if err := q.ExecRelease(); err != nil {
+		return fmt.Errorf("failed to execute insert chat query: %w", err)
+	}
+	return nil
 }
 
 func (r *ChatRepository) GetChat(ctx context.Context, chatID string) (*repository.Chat, error) {
@@ -98,7 +101,10 @@ func (r *ChatRepository) GetChatMembers(ctx context.Context, chatID string) ([]r
 func (r *ChatRepository) AddChatMember(ctx context.Context, member repository.ChatMember) error {
 	stmt, names := chatMembersTable.Insert()
 	q := r.session.Query(stmt, names).BindStruct(member)
-	return q.ExecRelease()
+	if err := q.ExecRelease(); err != nil {
+		return fmt.Errorf("failed to execute insert chat member query: %w", err)
+	}
+	return nil
 }
 
 func (r *ChatRepository) RemoveChatMember(ctx context.Context, chatID, userID string) error {
@@ -205,4 +211,20 @@ func (r *ChatRepository) MarkNotificationAsRead(ctx context.Context, userID, not
 func (r *ChatRepository) Close() error {
 	r.session.Close()
 	return nil
+}
+
+func (r *ChatRepository) GetUserChats(ctx context.Context, userID string) ([]repository.ChatMember, error) {
+	var members []repository.ChatMember
+	stmt, names := qb.Select("chat_members").
+		AllowFiltering().
+		Where(qb.Eq("user_id")).
+		ToCql()
+
+	q := r.session.Query(stmt, names).BindMap(qb.M{
+		"user_id": userID,
+	})
+	if err := q.SelectRelease(&members); err != nil {
+		return nil, err
+	}
+	return members, nil
 }

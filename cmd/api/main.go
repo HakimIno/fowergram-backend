@@ -113,7 +113,7 @@ func main() {
 	wsManager := service.NewWebSocketManager()
 	chatService := service.NewChatService(chatRepo, wsManager, redpandaBroker)
 	chatHandler := handler.NewChatHandler(chatService, wsManager)
-	routes.SetupChatRoutes(api, chatHandler)
+	routes.SetupChatRoutes(api, chatHandler, cfg.JWT.Secret)
 
 	// Graceful shutdown
 	c := make(chan os.Signal, 1)

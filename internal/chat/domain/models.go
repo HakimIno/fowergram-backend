@@ -28,6 +28,7 @@ type Chat struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Members   []string  `json:"members"`
+	IsPrivate bool      `json:"is_private"`
 }
 
 type ChatMember struct {

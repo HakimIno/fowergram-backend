@@ -8,11 +8,17 @@ import (
 
 func ValidateAuth(jwtSecret string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		token := c.Get("Authorization")
-		if token == "" {
+		authHeader := c.Get("Authorization")
+		if authHeader == "" {
 			return c.Status(401).JSON(fiber.Map{
 				"error": "Authorization header required",
 			})
+		}
+
+		// Remove "Bearer " prefix
+		token := authHeader
+		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			token = authHeader[7:]
 		}
 
 		user, err := security.ValidateToken(token, jwtSecret)
@@ -22,7 +28,7 @@ func ValidateAuth(jwtSecret string) fiber.Handler {
 			})
 		}
 
-		c.Locals("user", user)
+		c.Locals("user_id", user.ID)
 		return c.Next()
 	}
 }

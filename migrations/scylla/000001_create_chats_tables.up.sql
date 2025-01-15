@@ -3,11 +3,13 @@ WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
 
 CREATE TABLE IF NOT EXISTS fowergram.chats (
     id text,
+    name text,
     type text,
     created_by text,
     created_at timestamp,
     updated_at timestamp,
-    members set<text>,
+    members list<text>,
+    is_private boolean,
     PRIMARY KEY (id)
 );
 
