@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -15,7 +16,7 @@ import (
 type Config struct {
 	Server   ServerConfig
 	DB       *gorm.DB
-	MongoDB  MongoDBConfig
+	ScyllaDB ScyllaDBConfig
 	Redis    *redis.Client
 	Redpanda RedpandaConfig
 	Email    EmailConfig
@@ -34,9 +35,9 @@ type DBConfig struct {
 	Name     string
 }
 
-type MongoDBConfig struct {
-	URI      string
-	Database string
+type ScyllaDBConfig struct {
+	Hosts    []string
+	Keyspace string
 }
 
 type RedisConfig struct {
@@ -64,16 +65,33 @@ type JWTConfig struct {
 }
 
 func Load() (*Config, error) {
+	// โหลด environment
+	env := os.Getenv("GO_ENV")
+	if env == "" {
+		env = "development" // ค่าเริ่มต้น
+	}
+
+	// โหลดไฟล์ .env ตาม environment
+	viper.SetConfigFile(fmt.Sprintf(".env.%s", env))
+	if err := viper.ReadInConfig(); err != nil {
+		// ถ้าไม่เจอไฟล์เฉพาะ environment ให้ใช้ .env ปกติ
+		viper.SetConfigFile(".env")
+		if err := viper.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("error loading config file: %w", err)
+		}
+	}
+
 	viper.AutomaticEnv()
 
 	// Setup Database
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=5432 sslmode=disable",
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
 		viper.GetString("DB_HOST"),
+		viper.GetInt("DB_PORT"),
 		viper.GetString("DB_USER"),
 		viper.GetString("DB_PASSWORD"),
 		viper.GetString("DB_NAME"),
 	)
-
+	fmt.Println("dsn", dsn)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -101,14 +119,17 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
+	// Parse ScyllaDB hosts
+	scyllaHosts := strings.Split(viper.GetString("SCYLLA_HOSTS"), ",")
+
 	return &Config{
 		Server: ServerConfig{
 			Port: viper.GetString("PORT"),
 		},
 		DB: db,
-		MongoDB: MongoDBConfig{
-			URI:      viper.GetString("MONGODB_URI"),
-			Database: viper.GetString("MONGODB_DATABASE"),
+		ScyllaDB: ScyllaDBConfig{
+			Hosts:    scyllaHosts,
+			Keyspace: viper.GetString("SCYLLA_KEYSPACE"),
 		},
 		Redis: redisClient,
 		Redpanda: RedpandaConfig{

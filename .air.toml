@@ -1,0 +1,29 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "go build -o ./tmp/main ./cmd/api"
+bin = "./tmp/main"
+delay = 1000
+exclude_dir = ["assets", "tmp", "vendor"]
+include_ext = ["go", "tpl", "tmpl", "html"]
+exclude_regex = ["_test.go"]
+
+[log]
+# ปิดการแสดง log time
+time = false
+# เพิ่ม option นี้เพื่อแสดงเฉพาะ log หลัก
+main_only = true
+
+[color]
+main = "magenta"
+watcher = "cyan"
+build = "yellow"
+runner = "green"
+
+[screen]
+# เคลียร์หน้าจอทุกครั้งที่ rebuild
+clear_on_rebuild = true
+
+[misc]
+clean_on_exit = true

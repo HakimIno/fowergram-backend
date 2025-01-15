@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,52 +10,40 @@ import (
 	"fowergram/config"
 	"fowergram/internal/chat/broker/redpanda"
 	"fowergram/internal/chat/handler"
-	"fowergram/internal/chat/repository/mongodb"
+	"fowergram/internal/chat/repository/scylladb"
 	"fowergram/internal/chat/service"
 	"fowergram/internal/core/services"
 	"fowergram/internal/handlers"
+	"fowergram/internal/middleware"
 	"fowergram/internal/repositories/postgres"
 	"fowergram/internal/repositories/redis"
 	"fowergram/internal/routes"
 	"fowergram/pkg/email"
 	"fowergram/pkg/geolocation"
+	"fowergram/pkg/logger"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
+	fiberLogger "github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-func setupMongoDB(cfg config.MongoDBConfig) (*mongo.Database, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cfg.URI))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := client.Ping(ctx, nil); err != nil {
-		return nil, err
-	}
-
-	return client.Database(cfg.Database), nil
-}
-
 func main() {
+	// สร้าง logger instance
+	log := logger.NewLogger(logger.InfoLevel)
+
 	// Load config
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Fatal("Failed to load config", err,
+			logger.NewField("error", err.Error()))
 	}
 
-	// Setup MongoDB
-	mongoDB, err := setupMongoDB(cfg.MongoDB)
-	if err != nil {
-		log.Fatalf("Failed to connect to MongoDB: %v", err)
-	}
+	// ตัวอย่างการใช้งาน logger
+	log.Info("Server starting",
+		logger.NewField("port", cfg.Server.Port),
+		logger.NewField("env", os.Getenv("GO_ENV")),
+	)
 
 	// Setup repositories
 	userRepo := postgres.NewUserRepository(cfg.DB)
@@ -68,7 +54,7 @@ func main() {
 	emailService := email.NewEmailService(cfg.Email.APIKey, cfg.Email.SenderEmail, cfg.Email.SenderName)
 	geoService := geolocation.NewGeoService(cfg.Geo.APIKey)
 	userService := services.NewUserService(userRepo, cacheRepo)
-	authService := services.NewAuthService(authRepo, emailService, geoService, cacheRepo, cfg.JWT.Secret)
+	authService := services.NewAuthServiceWithLogger(authRepo, emailService, geoService, cacheRepo, cfg.JWT.Secret, log)
 
 	// Setup handlers
 	userHandler := handlers.NewUserHandler(userService)
@@ -84,7 +70,12 @@ func main() {
 
 	// Middleware
 	app.Use(recover.New())
-	app.Use(logger.New())
+	app.Use(middleware.RequestMonitoring(log))
+	app.Use(fiberLogger.New(fiberLogger.Config{
+		Format:     "[${time}] ${status} | ${latency} | ${ip} | ${method} | ${path}\n",
+		TimeFormat: "2006-01-02 15:04:05",
+		TimeZone:   "Local",
+	}))
 	app.Use(cors.New())
 
 	// Setup routes
@@ -96,12 +87,30 @@ func main() {
 	// Setup chat dependencies and routes
 	redpandaBroker, err := redpanda.NewRedpandaBroker([]string{cfg.Redpanda.Broker})
 	if err != nil {
-		log.Fatalf("Failed to connect to Redpanda: %v", err)
+		log.Error("Failed to connect to Redpanda", err,
+			logger.NewField("broker", cfg.Redpanda.Broker))
+		os.Exit(1)
 	}
 	defer redpandaBroker.Close()
 
-	chatRepo := mongodb.NewChatRepository(mongoDB)
-	wsManager := service.NewWebSocketManager(cfg.Redis)
+	// Initialize ScyllaDB schema
+	if err := scylladb.InitializeSchema(cfg.ScyllaDB.Hosts, cfg.ScyllaDB.Keyspace); err != nil {
+		log.Error("Failed to initialize ScyllaDB schema", err,
+			logger.NewField("hosts", cfg.ScyllaDB.Hosts),
+			logger.NewField("keyspace", cfg.ScyllaDB.Keyspace))
+		os.Exit(1)
+	}
+
+	chatRepo, err := scylladb.NewChatRepository(cfg.ScyllaDB.Hosts, cfg.ScyllaDB.Keyspace)
+	if err != nil {
+		log.Error("Failed to connect to ScyllaDB", err,
+			logger.NewField("hosts", cfg.ScyllaDB.Hosts))
+		os.Exit(1)
+	}
+	defer chatRepo.Close()
+
+	// Initialize WebSocket manager
+	wsManager := service.NewWebSocketManager()
 	chatService := service.NewChatService(chatRepo, wsManager, redpandaBroker)
 	chatHandler := handler.NewChatHandler(chatService, wsManager)
 	routes.SetupChatRoutes(api, chatHandler)
@@ -112,14 +121,20 @@ func main() {
 
 	go func() {
 		<-c
-		log.Println("Gracefully shutting down...")
+		log.Info("Gracefully shutting down...")
 		_ = app.Shutdown()
 	}()
 
 	// Start server
 	addr := fmt.Sprintf(":%s", cfg.Server.Port)
-	log.Printf("Server is running on %s", addr)
+	log.Info("Server is running",
+		logger.NewField("address", addr),
+		logger.NewField("environment", os.Getenv("GO_ENV")),
+	)
+
 	if err := app.Listen(addr); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		log.Error("Failed to start server", err,
+			logger.NewField("address", addr))
+		os.Exit(1)
 	}
 }

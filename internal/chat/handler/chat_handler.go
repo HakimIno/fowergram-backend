@@ -2,168 +2,137 @@ package handler
 
 import (
 	"context"
-	"fowergram/internal/chat/domain"
-	"fowergram/internal/chat/service"
-	"fowergram/internal/config"
-	"fowergram/internal/security"
+	"encoding/json"
+	"fmt"
+	"time"
 
-	"log"
-
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
+
+	"fowergram/internal/chat/domain"
+	"fowergram/internal/chat/service"
 )
 
 type ChatHandler struct {
 	chatService *service.ChatService
 	wsManager   *service.WebSocketManager
+	validator   *validator.Validate
 }
 
 func NewChatHandler(chatService *service.ChatService, wsManager *service.WebSocketManager) *ChatHandler {
 	return &ChatHandler{
 		chatService: chatService,
 		wsManager:   wsManager,
+		validator:   validator.New(),
 	}
 }
 
 func (h *ChatHandler) HandleWebSocket(c *websocket.Conn) {
-	// Wait for authentication message
-	var authMsg struct {
-		Type  string `json:"type"`
-		Token string `json:"token"`
-	}
-
-	if err := c.ReadJSON(&authMsg); err != nil {
-		log.Printf("Error reading auth message: %v", err)
-		return
-	}
-
-	if authMsg.Type != "auth" || authMsg.Token == "" {
-		log.Printf("Invalid auth message")
-		return
-	}
-
-	// Validate token and get user ID
-	claims, err := security.ValidateJWT(authMsg.Token, config.GetJWTSecret())
-	if err != nil {
-		log.Printf("Invalid token: %v", err)
-		return
-	}
-
-	userID := claims.UserID
-	if userID == "" {
-		log.Printf("No user ID in token")
-		return
-	}
-
-	h.wsManager.AddClient(userID, c.Conn)
-	defer h.wsManager.RemoveClient(userID)
+	userID := c.Locals("user_id").(string)
+	h.wsManager.AddConnection(userID, c)
+	defer h.wsManager.RemoveConnection(userID, c)
 
 	for {
-		var msg struct {
-			Type string         `json:"type"`
-			Data domain.Message `json:"data,omitempty"`
-		}
-
-		if err := c.ReadJSON(&msg); err != nil {
-			log.Printf("Error reading message: %v", err)
+		messageType, message, err := c.ReadMessage()
+		if err != nil {
 			break
 		}
 
-		switch msg.Type {
-		case "ping":
-			if err := c.WriteJSON(map[string]string{"type": "pong"}); err != nil {
-				log.Printf("Error sending pong: %v", err)
-				return
+		if messageType == websocket.TextMessage {
+			var msg domain.Message
+			if err := json.Unmarshal(message, &msg); err != nil {
+				continue
 			}
 
-		case "chat":
-			msg.Data.SenderID = userID
-			if err := h.chatService.SendMessage(context.Background(), &msg.Data); err != nil {
-				if err := c.WriteJSON(fiber.Map{
-					"error": "Failed to send message",
-				}); err != nil {
-					log.Printf("Error sending error message: %v", err)
-					break
-				}
-			}
+			msg.SenderID = userID
+			msg.CreatedAt = time.Now()
 
-		default:
-			log.Printf("Unknown message type: %s", msg.Type)
+			if err := h.chatService.HandleMessage(context.Background(), &msg); err != nil {
+				continue
+			}
 		}
 	}
 }
 
+type CreateChatRequest struct {
+	Type         string   `json:"type" validate:"required,oneof=direct group broadcast"`
+	Participants []string `json:"participants" validate:"required,min=1"`
+}
+
 func (h *ChatHandler) CreateChat(c *fiber.Ctx) error {
-	var chat domain.Chat
-	if err := c.BodyParser(&chat); err != nil {
-		log.Printf("Error parsing chat body: %v", err)
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
-		})
+	fmt.Printf("Received CreateChat request: %s\n", string(c.Body()))
+
+	userID := c.Locals("user_id").(string)
+	if userID == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
 	}
 
-	// Validate members
-	if len(chat.Members) < 2 {
-		log.Printf("Invalid number of members: %d", len(chat.Members))
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Chat must have at least 2 members",
-		})
+	var req CreateChatRequest
+	if err := c.BodyParser(&req); err != nil {
+		fmt.Printf("Error parsing request: %v\n", err)
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
 	}
 
-	for i, member := range chat.Members {
-		if member == "" {
-			log.Printf("Empty member ID at index %d", i)
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Member IDs cannot be empty",
-			})
+	// Validate request
+	if err := h.validator.Struct(req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Validation failed")
+	}
+
+	if len(req.Participants) == 0 {
+		return fiber.NewError(fiber.StatusBadRequest, "Participants list cannot be empty")
+	}
+
+	hasCreator := false
+	for _, participant := range req.Participants {
+		if participant == userID {
+			hasCreator = true
+			break
 		}
 	}
-
-	log.Printf("Creating chat with members: %v", chat.Members)
-
-	ctx := c.Context()
-	if err := h.chatService.CreateChat(ctx, &chat); err != nil {
-		log.Printf("Error creating chat: %v", err)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to create chat",
-		})
+	if !hasCreator {
+		req.Participants = append(req.Participants, userID)
 	}
 
-	log.Printf("Chat created successfully with ID: %s", chat.ID)
+	chat := &domain.Chat{
+		ID:        generateID(),
+		Type:      string(req.Type),
+		CreatedBy: userID,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Members:   req.Participants,
+	}
+
+	if err := h.chatService.CreateChat(c.Context(), chat); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to create chat")
+	}
+
 	return c.JSON(chat)
 }
 
 func (h *ChatHandler) GetMessages(c *fiber.Ctx) error {
-	chatID := c.Params("id")
+	chatID := c.Params("chat_id")
 	limit := c.QueryInt("limit", 50)
-	offset := c.QueryInt("offset", 0)
 
-	ctx := c.Context()
-	messages, err := h.chatService.GetMessages(ctx, chatID, limit, offset)
+	messages, err := h.chatService.GetMessages(c.Context(), chatID, limit)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to get messages",
-		})
+		return err
 	}
 
 	return c.JSON(messages)
 }
 
 func (h *ChatHandler) GetUserChats(c *fiber.Ctx) error {
-	userID := c.Params("id")
-	if userID == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "User ID is required",
-		})
-	}
+	userID := c.Locals("user_id").(string)
 
-	ctx := c.Context()
-	chats, err := h.chatService.GetUserChats(ctx, userID)
+	chats, err := h.chatService.GetUserChats(c.Context(), userID)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to get user chats",
-		})
+		return err
 	}
 
 	return c.JSON(chats)
+}
+
+func generateID() string {
+	return time.Now().Format("20060102150405.000000")
 }

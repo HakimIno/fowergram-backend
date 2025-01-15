@@ -32,7 +32,7 @@ func NewRedpandaBroker(brokers []string) (*RedpandaBroker, error) {
 	}, nil
 }
 
-func (b *RedpandaBroker) PublishMessage(ctx context.Context, message *domain.Message) error {
+func (b *RedpandaBroker) ProduceMessage(ctx context.Context, message *domain.Message) error {
 	data, err := json.Marshal(message)
 	if err != nil {
 		return err
@@ -40,7 +40,7 @@ func (b *RedpandaBroker) PublishMessage(ctx context.Context, message *domain.Mes
 
 	record := &kgo.Record{
 		Topic: topicMessages,
-		Key:   []byte(message.ChatID),
+		Key:   []byte(message.ConversationID),
 		Value: data,
 	}
 

@@ -17,22 +17,19 @@ services:
       timeout: 5s
       retries: 5
 
-  mongodb:
-    image: mongo:6-jammy
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: fowergram
-      MONGO_INITDB_ROOT_PASSWORD: fowergram
-      MONGO_INITDB_DATABASE: fowergram
+  scylla:
+    image: scylladb/scylla:5.2
     ports:
-      - "27017:27017"
+      - "9042:9042"
     volumes:
-      - mongodb_data:/data/db
+      - scylla_data:/var/lib/scylla
     networks:
       - fowergram-network
+    command: --smp 1 --memory 750M --overprovisioned 1
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 5s
-      timeout: 5s
+      test: ["CMD-SHELL", "nodetool status | grep -q '^UN'"]
+      interval: 30s
+      timeout: 10s
       retries: 5
 
   redpanda:
@@ -62,15 +59,26 @@ services:
       timeout: 5s
       retries: 5
 
-  migrate:
+  migrate-postgres:
     image: migrate/migrate
     volumes:
-      - ./migrations:/migrations
+      - ./migrations/postgres:/migrations
     command: ["-path", "/migrations", "-database",  "postgres://fowergram:fowergram@postgres:5432/fowergram?sslmode=disable", "up"]
     networks:
       - fowergram-network
     depends_on:
       postgres:
+        condition: service_healthy
+
+  migrate-scylla:
+    image: migrate/migrate
+    volumes:
+      - ./migrations/scylla:/migrations
+    command: ["-path", "/migrations", "-database", "cassandra://scylla:9042/fowergram?x-migrations-table=schema_migrations&x-multi-statement=true", "up"]
+    networks:
+      - fowergram-network
+    depends_on:
+      scylla:
         condition: service_healthy
 
   redis:
@@ -99,8 +107,8 @@ services:
       - DB_PASSWORD=fowergram
       - DB_NAME=fowergram
       - JWT_SECRET=your_jwt_secret_here
-      - MONGODB_URI=mongodb://fowergram:fowergram@mongodb:27017
-      - MONGODB_DATABASE=fowergram
+      - SCYLLA_HOSTS=scylla:9042
+      - SCYLLA_KEYSPACE=fowergram
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
@@ -113,13 +121,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      mongodb:
+      scylla:
         condition: service_healthy
       redis:
         condition: service_healthy
       redpanda:
         condition: service_healthy
-      migrate:
+      migrate-postgres:
+        condition: service_completed_successfully
+      migrate-scylla:
         condition: service_completed_successfully
     networks:
       - fowergram-network
@@ -140,4 +150,5 @@ networks:
 
 volumes:
   postgres_data:
+  scylla_data:
   mongodb_data: 
