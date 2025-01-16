@@ -89,11 +89,11 @@ func (r *ChatRepository) SaveMessage(ctx context.Context, msg *ChatMessage) erro
 
 func (r *ChatRepository) GetMessages(ctx context.Context, conversationID string, limit int, before time.Time) ([]*ChatMessage, error) {
 	var messages []*ChatMessage
-	q := r.session.Query(chatMessagesTable.Select()).
-		Where(qb.Eq("conversation_id")).
-		Where(qb.Lt("created_at")).
+	stmt := qb.Select(chatMessagesTable.Name()).
+		Where(qb.Eq("conversation_id"), qb.Lt("created_at")).
 		Limit(uint(limit))
 
+	q := stmt.Query(r.session)
 	err := q.BindMap(qb.M{
 		"conversation_id": conversationID,
 		"created_at":      before,
@@ -125,19 +125,28 @@ func (r *ChatRepository) SaveNotification(ctx context.Context, notification *Not
 
 func (r *ChatRepository) GetUserNotifications(ctx context.Context, userID string, limit int) ([]*Notification, error) {
 	var notifications []*Notification
-	err := r.session.Query(notificationsTable.Select()).
+	stmt := qb.Select(notificationsTable.Name()).
 		Where(qb.Eq("user_id")).
-		Limit(uint(limit)).
-		BindMap(qb.M{"user_id": userID}).
+		Limit(uint(limit))
+
+	q := stmt.Query(r.session)
+	err := q.BindMap(qb.M{"user_id": userID}).
 		SelectRelease(&notifications)
 
 	return notifications, err
 }
 
 func (r *ChatRepository) MarkNotificationAsRead(ctx context.Context, userID string, notificationID string) error {
-	return r.session.Query(`UPDATE notifications SET read = true WHERE user_id = ? AND id = ?`).
-		Bind(userID, notificationID).
-		ExecRelease()
+	stmt := qb.Update(notificationsTable.Name()).
+		Set("read").
+		Where(qb.Eq("user_id"), qb.Eq("id"))
+
+	return stmt.Query(r.session).
+		BindMap(qb.M{
+			"user_id": userID,
+			"id":      notificationID,
+			"read":    true,
+		}).ExecRelease()
 }
 
 func (r *ChatRepository) Close() {

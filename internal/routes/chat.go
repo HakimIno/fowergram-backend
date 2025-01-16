@@ -25,4 +25,10 @@ func SetupChatRoutes(api fiber.Router, chatHandler *handler.ChatHandler, jwtSecr
 	chat.Post("/", chatHandler.CreateChat)
 	chat.Get("/:id/messages", chatHandler.GetMessages)
 	chat.Get("/user/:id", chatHandler.GetUserChats)
+
+	// Invite link routes
+	chat.Post("/:chat_id/invite", chatHandler.CreateInviteLink)
+	chat.Get("/:chat_id/invite", chatHandler.GetChatInviteLinks)
+	chat.Delete("/:chat_id/invite/:code", chatHandler.DeleteInviteLink)
+	chat.Post("/join/:code", chatHandler.JoinChatViaInvite)
 }

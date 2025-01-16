@@ -152,3 +152,27 @@ func toDomainNotifications(notifications []repository.Notification) []*domain.No
 	}
 	return result
 }
+
+func toDomainInviteLink(link *repository.ChatInviteLink) *domain.ChatInviteLink {
+	if link == nil {
+		return nil
+	}
+	return &domain.ChatInviteLink{
+		ChatID:    link.ChatID,
+		Code:      link.Code,
+		CreatedBy: link.CreatedBy,
+		CreatedAt: link.CreatedAt,
+		ExpiresAt: link.ExpiresAt,
+		MaxUses:   link.MaxUses,
+		Uses:      link.Uses,
+	}
+}
+
+func toDomainInviteLinks(links []repository.ChatInviteLink) []*domain.ChatInviteLink {
+	result := make([]*domain.ChatInviteLink, len(links))
+	for i, link := range links {
+		linkCopy := link
+		result[i] = toDomainInviteLink(&linkCopy)
+	}
+	return result
+}

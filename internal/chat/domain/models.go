@@ -54,3 +54,13 @@ type Notification struct {
 	Read      bool      `json:"read"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+type ChatInviteLink struct {
+	ChatID    string    `json:"chat_id"`
+	Code      string    `json:"code"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	MaxUses   int       `json:"max_uses"`
+	Uses      int       `json:"uses"`
+}

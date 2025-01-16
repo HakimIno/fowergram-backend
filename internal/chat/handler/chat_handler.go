@@ -223,3 +223,108 @@ func (h *ChatHandler) GetUserChats(c *fiber.Ctx) error {
 func generateID() string {
 	return time.Now().Format("20060102150405.000000")
 }
+
+type CreateInviteLinkRequest struct {
+	MaxUses   int    `json:"max_uses" validate:"min=0"`
+	ExpiresIn string `json:"expires_in" validate:"required"`
+}
+
+func (h *ChatHandler) CreateInviteLink(c *fiber.Ctx) error {
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
+	}
+	userID := fmt.Sprintf("%d", userIDRaw)
+
+	chatID := c.Params("chat_id")
+	if chatID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "Chat ID is required")
+	}
+
+	var req CreateInviteLinkRequest
+	if err := c.BodyParser(&req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("Invalid request body: %v", err))
+	}
+
+	if err := h.validator.Struct(req); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("Validation failed: %v", err))
+	}
+
+	duration, err := time.ParseDuration(req.ExpiresIn)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("Invalid duration format. Use format like '24h', '7d', '30m': %v", err))
+	}
+
+	if duration < 5*time.Minute {
+		return fiber.NewError(fiber.StatusBadRequest, "Expiration time must be at least 5 minutes")
+	}
+
+	link, err := h.chatService.CreateInviteLink(c.Context(), chatID, userID, req.MaxUses, duration)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to create invite link: %v", err))
+	}
+
+	return c.JSON(link)
+}
+
+func (h *ChatHandler) GetChatInviteLinks(c *fiber.Ctx) error {
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
+	}
+
+	chatID := c.Params("chat_id")
+	if chatID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "Chat ID is required")
+	}
+
+	links, err := h.chatService.GetChatInviteLinks(c.Context(), chatID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to get invite links: %v", err))
+	}
+
+	return c.JSON(links)
+}
+
+func (h *ChatHandler) JoinChatViaInvite(c *fiber.Ctx) error {
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
+	}
+	userID := fmt.Sprintf("%d", userIDRaw)
+
+	code := c.Params("code")
+	if code == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "Invite code is required")
+	}
+
+	chat, err := h.chatService.JoinChatViaInvite(c.Context(), code, userID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("Failed to join chat: %v", err))
+	}
+
+	return c.JSON(chat)
+}
+
+func (h *ChatHandler) DeleteInviteLink(c *fiber.Ctx) error {
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
+	}
+
+	chatID := c.Params("chat_id")
+	if chatID == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "Chat ID is required")
+	}
+
+	code := c.Params("code")
+	if code == "" {
+		return fiber.NewError(fiber.StatusBadRequest, "Invite code is required")
+	}
+
+	if err := h.chatService.DeleteInviteLink(c.Context(), chatID, code); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to delete invite link: %v", err))
+	}
+
+	return c.SendStatus(fiber.StatusNoContent)
+}

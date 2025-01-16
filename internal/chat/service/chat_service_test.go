@@ -98,6 +98,34 @@ func (m *MockChatRepository) GetUserChats(ctx context.Context, userID string) ([
 	return args.Get(0).([]repository.ChatMember), args.Error(1)
 }
 
+func (m *MockChatRepository) CreateInviteLink(ctx context.Context, link repository.ChatInviteLink) error {
+	args := m.Called(ctx, link)
+	return args.Error(0)
+}
+
+func (m *MockChatRepository) GetInviteLinkByCode(ctx context.Context, code string) (*repository.ChatInviteLink, error) {
+	args := m.Called(ctx, code)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*repository.ChatInviteLink), args.Error(1)
+}
+
+func (m *MockChatRepository) GetChatInviteLinks(ctx context.Context, chatID string) ([]repository.ChatInviteLink, error) {
+	args := m.Called(ctx, chatID)
+	return args.Get(0).([]repository.ChatInviteLink), args.Error(1)
+}
+
+func (m *MockChatRepository) IncrementInviteLinkUses(ctx context.Context, chatID, code string) error {
+	args := m.Called(ctx, chatID, code)
+	return args.Error(0)
+}
+
+func (m *MockChatRepository) DeleteInviteLink(ctx context.Context, chatID, code string) error {
+	args := m.Called(ctx, chatID, code)
+	return args.Error(0)
+}
+
 // MockMessageProducer is a mock implementation of broker.MessageProducer
 type MockMessageProducer struct {
 	mock.Mock
@@ -437,7 +465,7 @@ func TestChatService_GetUserChats(t *testing.T) {
 	}
 
 	// Set up expectations
-	mockRepo.On("GetChatMembers", ctx, userID).Return(members, nil)
+	mockRepo.On("GetUserChats", ctx, userID).Return(members, nil)
 	mockRepo.On("GetChat", ctx, "chat1").Return(chat1, nil)
 	mockRepo.On("GetChatMembers", ctx, "chat1").Return([]repository.ChatMember{members[0]}, nil)
 	mockRepo.On("GetChat", ctx, "chat2").Return(chat2, nil)
@@ -579,5 +607,161 @@ func TestChatService_UpdateChatMemberRole(t *testing.T) {
 
 	// Assert
 	assert.NoError(t, err)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestChatService_CreateInviteLink(t *testing.T) {
+	mockRepo := new(MockChatRepository)
+	mockProducer := new(MockMessageProducer)
+	wsManager := NewWebSocketManager()
+	service := NewChatService(mockRepo, wsManager, mockProducer)
+
+	ctx := context.Background()
+	chatID := "chat1"
+	userID := "user1"
+	maxUses := 5
+	expiresIn := 24 * time.Hour
+
+	mockRepo.On("CreateInviteLink", ctx, mock.MatchedBy(func(link repository.ChatInviteLink) bool {
+		return link.ChatID == chatID &&
+			link.CreatedBy == userID &&
+			link.MaxUses == maxUses &&
+			!link.ExpiresAt.IsZero()
+	})).Return(nil)
+
+	link, err := service.CreateInviteLink(ctx, chatID, userID, maxUses, expiresIn)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, link)
+	assert.Equal(t, chatID, link.ChatID)
+	assert.Equal(t, userID, link.CreatedBy)
+	assert.Equal(t, maxUses, link.MaxUses)
+	assert.NotEmpty(t, link.Code)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestChatService_JoinChatViaInvite(t *testing.T) {
+	mockRepo := new(MockChatRepository)
+	mockProducer := new(MockMessageProducer)
+	wsManager := NewWebSocketManager()
+	service := NewChatService(mockRepo, wsManager, mockProducer)
+
+	ctx := context.Background()
+	code := "testcode123"
+	userID := "user2"
+
+	// Setup test data
+	inviteLink := &repository.ChatInviteLink{
+		ChatID:    "chat1",
+		Code:      code,
+		CreatedBy: "user1",
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		MaxUses:   5,
+		Uses:      2,
+	}
+
+	chat := &repository.Chat{
+		ID:        "chat1",
+		Name:      "Test Group",
+		Type:      repository.GroupChat,
+		CreatedBy: "user1",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+		Members:   []string{"user1"},
+	}
+
+	members := []repository.ChatMember{
+		{
+			ChatID:    "chat1",
+			UserID:    "user1",
+			Role:      repository.ChatRoleMember,
+			JoinedAt:  time.Now(),
+			UpdatedAt: time.Now(),
+		},
+	}
+
+	// Setup expectations
+	mockRepo.On("GetInviteLinkByCode", ctx, code).Return(inviteLink, nil)
+	mockRepo.On("GetChat", ctx, inviteLink.ChatID).Return(chat, nil)
+	mockRepo.On("GetChatMembers", ctx, inviteLink.ChatID).Return(members, nil)
+	mockRepo.On("AddChatMember", ctx, mock.MatchedBy(func(member repository.ChatMember) bool {
+		return member.ChatID == inviteLink.ChatID && member.UserID == userID
+	})).Return(nil)
+	mockRepo.On("IncrementInviteLinkUses", ctx, inviteLink.ChatID, code).Return(nil)
+
+	// Execute test
+	result, err := service.JoinChatViaInvite(ctx, code, userID)
+
+	// Assert
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Equal(t, chat.ID, result.ID)
+	mockRepo.AssertExpectations(t)
+}
+
+func TestChatService_JoinChatViaInvite_ExpiredLink(t *testing.T) {
+	mockRepo := new(MockChatRepository)
+	mockProducer := new(MockMessageProducer)
+	wsManager := NewWebSocketManager()
+	service := NewChatService(mockRepo, wsManager, mockProducer)
+
+	ctx := context.Background()
+	code := "testcode123"
+	userID := "user2"
+
+	// Setup expired invite link
+	inviteLink := &repository.ChatInviteLink{
+		ChatID:    "chat1",
+		Code:      code,
+		CreatedBy: "user1",
+		CreatedAt: time.Now().Add(-48 * time.Hour),
+		ExpiresAt: time.Now().Add(-24 * time.Hour), // Expired
+		MaxUses:   5,
+		Uses:      2,
+	}
+
+	mockRepo.On("GetInviteLinkByCode", ctx, code).Return(inviteLink, nil)
+
+	// Execute test
+	result, err := service.JoinChatViaInvite(ctx, code, userID)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "expired")
+	mockRepo.AssertExpectations(t)
+}
+
+func TestChatService_JoinChatViaInvite_MaxUsesReached(t *testing.T) {
+	mockRepo := new(MockChatRepository)
+	mockProducer := new(MockMessageProducer)
+	wsManager := NewWebSocketManager()
+	service := NewChatService(mockRepo, wsManager, mockProducer)
+
+	ctx := context.Background()
+	code := "testcode123"
+	userID := "user2"
+
+	// Setup invite link with max uses reached
+	inviteLink := &repository.ChatInviteLink{
+		ChatID:    "chat1",
+		Code:      code,
+		CreatedBy: "user1",
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(24 * time.Hour),
+		MaxUses:   5,
+		Uses:      5, // Max uses reached
+	}
+
+	mockRepo.On("GetInviteLinkByCode", ctx, code).Return(inviteLink, nil)
+
+	// Execute test
+	result, err := service.JoinChatViaInvite(ctx, code, userID)
+
+	// Assert
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "maximum uses")
 	mockRepo.AssertExpectations(t)
 }

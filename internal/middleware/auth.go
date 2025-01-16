@@ -24,7 +24,7 @@ func ValidateAuth(jwtSecret string) fiber.Handler {
 		user, err := security.ValidateToken(token, jwtSecret)
 		if err != nil {
 			return c.Status(401).JSON(fiber.Map{
-				"error": "Invalid token",
+				"error": "Authentication error: Please refresh your session or log in again.",
 			})
 		}
 

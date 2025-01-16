@@ -72,6 +72,16 @@ type Notification struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type ChatInviteLink struct {
+	ChatID    string    `json:"chat_id"`
+	Code      string    `json:"code"`
+	CreatedBy string    `json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+	MaxUses   int       `json:"max_uses"`
+	Uses      int       `json:"uses"`
+}
+
 type ChatRepository interface {
 	CreateChat(ctx context.Context, chat Chat) error
 	GetChat(ctx context.Context, chatID string) (*Chat, error)
@@ -88,4 +98,9 @@ type ChatRepository interface {
 	GetUserNotifications(ctx context.Context, userID string, limit int) ([]Notification, error)
 	MarkNotificationAsRead(ctx context.Context, userID, notificationID string) error
 	Close() error
+	CreateInviteLink(ctx context.Context, link ChatInviteLink) error
+	GetInviteLinkByCode(ctx context.Context, code string) (*ChatInviteLink, error)
+	GetChatInviteLinks(ctx context.Context, chatID string) ([]ChatInviteLink, error)
+	IncrementInviteLinkUses(ctx context.Context, chatID, code string) error
+	DeleteInviteLink(ctx context.Context, chatID, code string) error
 }

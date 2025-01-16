@@ -208,7 +208,7 @@ func setupTestApp() *fiber.App {
 		token := strings.TrimPrefix(auth, "Bearer ")
 		if token == "invalid.token.here" {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error": "Invalid token",
+				"error": "Authentication error: Please refresh your session or log in again.",
 			})
 		}
 		return c.Next()

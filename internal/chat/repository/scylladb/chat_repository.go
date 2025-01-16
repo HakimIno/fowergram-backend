@@ -46,6 +46,13 @@ var chatMembersTable = table.New(table.Metadata{
 	SortKey: []string{"user_id"},
 })
 
+var chatInviteLinksTable = table.New(table.Metadata{
+	Name:    "chat_invite_links",
+	Columns: []string{"chat_id", "code", "created_by", "created_at", "expires_at", "max_uses", "uses"},
+	PartKey: []string{"chat_id"},
+	SortKey: []string{"code"},
+})
+
 type ChatRepository struct {
 	session *gocqlx.Session
 }
@@ -227,4 +234,97 @@ func (r *ChatRepository) GetUserChats(ctx context.Context, userID string) ([]rep
 		return nil, err
 	}
 	return members, nil
+}
+
+func (r *ChatRepository) CreateInviteLink(ctx context.Context, link repository.ChatInviteLink) error {
+	stmt, names := chatInviteLinksTable.Insert()
+	q := r.session.Query(stmt, names).BindStruct(link)
+	if err := q.ExecRelease(); err != nil {
+		return fmt.Errorf("failed to execute insert invite link query: %w", err)
+	}
+	return nil
+}
+
+func (r *ChatRepository) GetInviteLinkByCode(ctx context.Context, code string) (*repository.ChatInviteLink, error) {
+	var link repository.ChatInviteLink
+	stmt, names := qb.Select("fowergram.chat_invite_links").
+		Where(qb.Eq("code")).
+		AllowFiltering().
+		ToCql()
+
+	q := r.session.Query(stmt, names).BindMap(qb.M{
+		"code": code,
+	})
+
+	if err := q.GetRelease(&link); err != nil {
+		if err == gocql.ErrNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// Verify the link exists and get current uses count
+	stmt, names = qb.Select("fowergram.chat_invite_links").
+		Where(qb.Eq("chat_id"), qb.Eq("code")).
+		ToCql()
+
+	q = r.session.Query(stmt, names).BindMap(qb.M{
+		"chat_id": link.ChatID,
+		"code":    code,
+	})
+
+	if err := q.GetRelease(&link); err != nil {
+		if err == gocql.ErrNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &link, nil
+}
+
+func (r *ChatRepository) GetChatInviteLinks(ctx context.Context, chatID string) ([]repository.ChatInviteLink, error) {
+	var links []repository.ChatInviteLink
+	stmt, names := chatInviteLinksTable.Select()
+	q := r.session.Query(stmt, names).BindMap(qb.M{"chat_id": chatID})
+	if err := q.SelectRelease(&links); err != nil {
+		return nil, err
+	}
+	return links, nil
+}
+
+func (r *ChatRepository) IncrementInviteLinkUses(ctx context.Context, chatID, code string) error {
+	// First get current uses
+	link, err := r.GetInviteLinkByCode(ctx, code)
+	if err != nil {
+		return fmt.Errorf("failed to get invite link: %w", err)
+	}
+	if link == nil {
+		return fmt.Errorf("invite link not found")
+	}
+
+	// Update with new count
+	link.Uses++
+	stmt, names := qb.Update("fowergram.chat_invite_links").Set("uses").Where(qb.Eq("chat_id"), qb.Eq("code")).ToCql()
+	q := r.session.Query(stmt, names).BindMap(qb.M{
+		"chat_id": chatID,
+		"code":    code,
+		"uses":    link.Uses,
+	})
+
+	if err := q.ExecRelease(); err != nil {
+		return fmt.Errorf("failed to update invite link uses: %w", err)
+	}
+	return nil
+}
+
+func (r *ChatRepository) DeleteInviteLink(ctx context.Context, chatID, code string) error {
+	stmt, names := qb.Delete("fowergram.chat_invite_links").
+		Where(qb.Eq("chat_id"), qb.Eq("code")).
+		ToCql()
+
+	return r.session.Query(stmt, names).BindMap(qb.M{
+		"chat_id": chatID,
+		"code":    code,
+	}).ExecRelease()
 }
