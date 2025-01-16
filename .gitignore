@@ -36,3 +36,5 @@ tmp/
 
 .env
 .env.*
+
+.env
