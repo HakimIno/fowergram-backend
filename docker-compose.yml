@@ -1,67 +1,154 @@
-version: "3.8"
-
 services:
-  app:
-    build:
-      context: .
-      dockerfile: docker/app/Dockerfile
-    ports:
-      - "3000:8080"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
-    environment:
-      - PORT=8080
-      - DB_HOST=postgres
-      - DB_USER=postgres
-      - DB_PASSWORD=password
-      - DB_NAME=fowergram
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=
-      - JWT_SECRET=your-secret-key
-    restart: unless-stopped
-
   postgres:
-    image: postgres:14-alpine
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: fowergram
+      POSTGRES_PASSWORD: fowergram
+      POSTGRES_DB: fowergram
     ports:
       - "5432:5432"
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=fowergram
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - fowergram-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U fowergram"]
       interval: 5s
       timeout: 5s
       retries: 5
 
+  scylla:
+    image: scylladb/scylla:5.2
+    ports:
+      - "9042:9042"
+    volumes:
+      - scylla_data:/var/lib/scylla
+    networks:
+      - fowergram-network
+    command: --smp 1 --memory 750M --overprovisioned 1
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status | grep -q '^UN'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  redpanda:
+    image: vectorized/redpanda:v22.3.11
+    command:
+      - redpanda
+      - start
+      - --smp
+      - "1"
+      - --reserve-memory
+      - 0M
+      - --overprovisioned
+      - --node-id
+      - "0"
+      - --kafka-addr
+      - PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr
+      - PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    networks:
+      - fowergram-network
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate-postgres:
+    image: migrate/migrate
+    volumes:
+      - ./migrations/postgres:/migrations
+    command: ["-path", "/migrations", "-database",  "postgres://fowergram:fowergram@postgres:5432/fowergram?sslmode=disable", "up"]
+    networks:
+      - fowergram-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  migrate-scylla:
+    image: migrate/migrate
+    volumes:
+      - ./migrations/scylla:/migrations
+    command: ["-path", "/migrations", "-database", "cassandra://scylla:9042/fowergram?x-migrations-table=schema_migrations&x-multi-statement=true", "up"]
+    networks:
+      - fowergram-network
+    depends_on:
+      scylla:
+        condition: service_healthy
+
   redis:
-    image: redis:alpine
+    image: redis:7-alpine
     ports:
       - "6379:6379"
-    volumes:
-      - redis_data:/data
+    networks:
+      - fowergram-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  prometheus:
-    image: prom/prometheus
-    ports:
-      - "9090:9090"
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-
-  grafana:
-    image: grafana/grafana
+      - .:/app
     ports:
-      - "3000:3000"
+      - "8080:8080"
+    environment:
+      - DB_HOST=postgres
+      - DB_USER=fowergram
+      - DB_PASSWORD=fowergram
+      - DB_NAME=fowergram
+      - JWT_SECRET=your_jwt_secret_here
+      - SCYLLA_HOSTS=scylla:9042
+      - SCYLLA_KEYSPACE=fowergram
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDPANDA_BROKER=redpanda:29092
+      - PORT=8080
+      # Debug flags
+      - GO111MODULE=on
+      - GODEBUG=netdns=cgo
+      - GIN_MODE=debug
     depends_on:
-      - prometheus
+      postgres:
+        condition: service_healthy
+      scylla:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      migrate-postgres:
+        condition: service_completed_successfully
+      migrate-scylla:
+        condition: service_completed_successfully
+    networks:
+      - fowergram-network
+
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   command: tunnel --no-autoupdate run --url http://app:8080
+  #   environment:
+  #     - TUNNEL_TOKEN=eyJhIjoiYjgwZDA4NjlmM2ZiZjRmNjhlZTljMmEzMGU2M2MwOTEiLCJ0IjoiMDczMDFkZWUtMWQxMS00YjE4LTk4Y2QtNDc0NTIyYTFlN2RiIiwicyI6Ik5EWmtNRGN5TldRdE5XTXlOaTAwWTJKaUxXSmhPVEV0TlRGa1lqSTBNalU0TkRRMSJ9
+  #   networks:
+  #     - fowergram-network
+  #   depends_on:
+  #     - app
+
+networks:
+  fowergram-network:
+    driver: bridge
 
 volumes:
   postgres_data:
-  redis_data:
+  scylla_data:
+  mongodb_data: 
