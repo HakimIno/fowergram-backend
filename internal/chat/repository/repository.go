@@ -30,13 +30,13 @@ const (
 
 type ChatMessage struct {
 	ConversationID string      `json:"conversation_id"`
+	PartitionDate  string      `json:"partition_date"`
 	MessageID      string      `json:"message_id"`
 	SenderID       string      `json:"sender_id"`
 	Content        string      `json:"content"`
 	Type           MessageType `json:"type"`
 	CreatedAt      time.Time   `json:"created_at"`
 }
-
 type Chat struct {
 	ID        string    `json:"id"`
 	Name      string    `json:"name"`

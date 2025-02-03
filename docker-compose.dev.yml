@@ -93,46 +93,46 @@ services:
       timeout: 5s
       retries: 5
 
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    volumes:
-      - .:/app
-    ports:
-      - "8080:8080"
-    environment:
-      - DB_HOST=postgres
-      - DB_USER=fowergram
-      - DB_PASSWORD=fowergram
-      - DB_NAME=fowergram
-      - JWT_SECRET=your_jwt_secret_here
-      - SCYLLA_HOSTS=scylla:9042
-      - SCYLLA_KEYSPACE=fowergram
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=
-      - REDPANDA_BROKER=redpanda:29092
-      - PORT=8080
-      # Debug flags
-      - GO111MODULE=on
-      - GODEBUG=netdns=cgo
-      - GIN_MODE=debug
-    depends_on:
-      postgres:
-        condition: service_healthy
-      scylla:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      redpanda:
-        condition: service_healthy
-      migrate-postgres:
-        condition: service_completed_successfully
-      migrate-scylla:
-        condition: service_completed_successfully
-    networks:
-      - fowergram-network
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dev
+  #   volumes:
+  #     - .:/app
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     - DB_HOST=postgres
+  #     - DB_USER=fowergram
+  #     - DB_PASSWORD=fowergram
+  #     - DB_NAME=fowergram
+  #     - JWT_SECRET=your_jwt_secret_here
+  #     - SCYLLA_HOSTS=scylla:9042
+  #     - SCYLLA_KEYSPACE=fowergram
+  #     - REDIS_HOST=redis
+  #     - REDIS_PORT=6379
+  #     - REDIS_PASSWORD=
+  #     - REDPANDA_BROKER=redpanda:29092
+  #     - PORT=8080
+  #     # Debug flags
+  #     - GO111MODULE=on
+  #     - GODEBUG=netdns=cgo
+  #     - GIN_MODE=debug
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     scylla:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     redpanda:
+  #       condition: service_healthy
+  #     migrate-postgres:
+  #       condition: service_completed_successfully
+  #     migrate-scylla:
+  #       condition: service_completed_successfully
+  #   networks:
+  #     - fowergram-network
 
   # cloudflared:
   #   image: cloudflare/cloudflared:latest

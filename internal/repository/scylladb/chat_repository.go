@@ -12,6 +12,7 @@ import (
 
 type ChatMessage struct {
 	ConversationID string    `json:"conversation_id"`
+	PartitionDate  string    `json:"partition_date"` // เพิ่มฟิลด์นี้
 	MessageID      string    `json:"message_id"`
 	SenderID       string    `json:"sender_id"`
 	Content        string    `json:"content"`
@@ -37,9 +38,17 @@ type Notification struct {
 
 var (
 	chatMessageMetadata = table.Metadata{
-		Name:    "chat_messages",
-		Columns: []string{"conversation_id", "message_id", "sender_id", "content", "type", "created_at"},
-		PartKey: []string{"conversation_id"},
+		Name: "chat_messages",
+		Columns: []string{
+			"conversation_id",
+			"partition_date",
+			"message_id",
+			"sender_id",
+			"content",
+			"type",
+			"created_at",
+		},
+		PartKey: []string{"conversation_id", "partition_date"},
 		SortKey: []string{"created_at", "message_id"},
 	}
 
@@ -82,6 +91,8 @@ func NewChatRepository(hosts []string, keyspace string) (*ChatRepository, error)
 }
 
 func (r *ChatRepository) SaveMessage(ctx context.Context, msg *ChatMessage) error {
+	msg.PartitionDate = msg.CreatedAt.Format("20060102")
+
 	return r.session.Query(chatMessagesTable.Insert()).
 		BindStruct(msg).
 		ExecRelease()
@@ -89,17 +100,89 @@ func (r *ChatRepository) SaveMessage(ctx context.Context, msg *ChatMessage) erro
 
 func (r *ChatRepository) GetMessages(ctx context.Context, conversationID string, limit int, before time.Time) ([]*ChatMessage, error) {
 	var messages []*ChatMessage
+
+	// คำนวณ partition_date จาก before time
+	partitionDate := before.Format("20060102")
+
+	// Query สำหรับวันที่ระบุ
 	stmt := qb.Select(chatMessagesTable.Name()).
-		Where(qb.Eq("conversation_id"), qb.Lt("created_at")).
+		Where(qb.Eq("conversation_id"), qb.Eq("partition_date"), qb.Lt("created_at")).
 		Limit(uint(limit))
 
 	q := stmt.Query(r.session)
 	err := q.BindMap(qb.M{
 		"conversation_id": conversationID,
+		"partition_date":  partitionDate,
 		"created_at":      before,
 	}).SelectRelease(&messages)
 
+	// ถ้าได้ข้อความไม่ครบตามจำนวน limit ให้ query วันก่อนหน้าเพิ่ม
+	if err == nil && len(messages) < limit {
+		previousDate := before.AddDate(0, 0, -1).Format("20060102")
+		remainingLimit := limit - len(messages)
+
+		additionalStmt := qb.Select(chatMessagesTable.Name()).
+			Where(qb.Eq("conversation_id"), qb.Eq("partition_date")).
+			Limit(uint(remainingLimit))
+
+		var additionalMessages []*ChatMessage
+		err = additionalStmt.Query(r.session).
+			BindMap(qb.M{
+				"conversation_id": conversationID,
+				"partition_date":  previousDate,
+			}).SelectRelease(&additionalMessages)
+
+		if err == nil {
+			messages = append(messages, additionalMessages...)
+		}
+	}
+
 	return messages, err
+}
+
+func (r *ChatRepository) GetLatestMessages(ctx context.Context, conversationID string, limit int) ([]*ChatMessage, error) {
+	return r.GetMessages(ctx, conversationID, limit, time.Now())
+}
+
+func (r *ChatRepository) GetMessagesByDateRange(ctx context.Context, conversationID string, startDate, endDate time.Time, limit int) ([]*ChatMessage, error) {
+	var allMessages []*ChatMessage
+
+	// วนลูปตามจำนวนวันในช่วงที่ต้องการ
+	currentDate := startDate
+	for currentDate.Before(endDate) || currentDate.Equal(endDate) {
+		partitionDate := currentDate.Format("20060102")
+
+		stmt := qb.Select(chatMessagesTable.Name()).
+			Where(qb.Eq("conversation_id"), qb.Eq("partition_date")).
+			Limit(uint(limit))
+
+		var messages []*ChatMessage
+		err := stmt.Query(r.session).
+			BindMap(qb.M{
+				"conversation_id": conversationID,
+				"partition_date":  partitionDate,
+			}).SelectRelease(&messages)
+
+		if err != nil {
+			return nil, err
+		}
+
+		allMessages = append(allMessages, messages...)
+
+		// ถ้าได้ข้อความครบตาม limit แล้ว ให้หยุด
+		if len(allMessages) >= limit {
+			break
+		}
+
+		currentDate = currentDate.AddDate(0, 0, 1)
+	}
+
+	// ตัดให้เหลือตามจำนวน limit ที่ต้องการ
+	if len(allMessages) > limit {
+		allMessages = allMessages[:limit]
+	}
+
+	return allMessages, nil
 }
 
 func (r *ChatRepository) UpdateUserStatus(ctx context.Context, status *UserStatus) error {
