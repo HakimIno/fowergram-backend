@@ -143,12 +143,21 @@ func (s *authService) Register(user *domain.User) error {
 	return nil
 }
 
-func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSession) (*domain.User, string, error) {
+func (s *authService) Login(identifier, password string, deviceInfo *domain.DeviceSession) (*domain.User, string, error) {
 	startTime := time.Now()
 	metrics := &AuthMetrics{}
 
+	// Try to determine if identifier is email or username
+	isEmail := strings.Contains(identifier, "@")
+
 	// Try to get user from cache first
-	cacheKey := fmt.Sprintf("user:email:%s", email)
+	var cacheKey string
+	if isEmail {
+		cacheKey = fmt.Sprintf("user:email:%s", identifier)
+	} else {
+		cacheKey = fmt.Sprintf("user:username:%s", identifier)
+	}
+
 	var user *domain.User
 	cacheDone := make(chan bool, 1)
 
@@ -177,14 +186,19 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 	dbStart := time.Now()
 	if user == nil {
 		var err error
-		user, err = s.authRepo.FindUserByEmail(email)
+		if isEmail {
+			user, err = s.authRepo.FindUserByEmail(identifier)
+		} else {
+			user, err = s.authRepo.FindUserByUsername(identifier)
+		}
+
 		if err != nil {
 			s.log.Error("User lookup failed", err,
-				logger.NewField("email", email),
+				logger.NewField("identifier", identifier),
 			)
 			return nil, "", &errors.AuthError{
 				Code:    "AUTH001",
-				Message: "Invalid email or password",
+				Message: "Invalid identifier or password",
 			}
 		}
 
@@ -249,7 +263,7 @@ func (s *authService) Login(email, password string, deviceInfo *domain.DeviceSes
 
 		return nil, "", &errors.AuthError{
 			Code:    "AUTH001",
-			Message: "Invalid email or password",
+			Message: "Invalid identifier or password",
 		}
 	}
 

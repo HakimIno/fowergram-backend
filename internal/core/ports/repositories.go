@@ -31,6 +31,7 @@ type CacheRepository interface {
 type AuthRepository interface {
 	CreateUser(user *domain.User) error
 	FindUserByEmail(email string) (*domain.User, error)
+	FindUserByUsername(username string) (*domain.User, error)
 	FindUserByID(id uint) (*domain.User, error)
 	UpdateUser(user *domain.User) error
 	CreateDeviceSession(session *domain.DeviceSession) error

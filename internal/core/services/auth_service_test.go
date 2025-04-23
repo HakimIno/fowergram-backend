@@ -33,6 +33,14 @@ func (m *MockAuthRepo) FindUserByID(id uint) (*domain.User, error) {
 	return nil, fmt.Errorf("user not found")
 }
 
+func (m *MockAuthRepo) FindUserByUsername(username string) (*domain.User, error) {
+	args := m.Called(username)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.User), args.Error(1)
+}
+
 // Implement all AuthRepository methods...
 
 type MockEmailService struct {

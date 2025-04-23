@@ -65,23 +65,24 @@ type JWTConfig struct {
 }
 
 func Load() (*Config, error) {
-	// โหลด environment
-	env := os.Getenv("GO_ENV")
-	if env == "" {
-		env = "development" // ค่าเริ่มต้น
-	}
+	// Load environment
+	env := getEnv("GO_ENV", "development")
 
-	// โหลดไฟล์ .env ตาม environment
-	viper.SetConfigFile(fmt.Sprintf(".env.%s", env))
+	// Setup viper
+	viper.SetConfigType("env")
+	viper.AutomaticEnv()
+
+	// Try to load environment-specific config file first
+	configFile := fmt.Sprintf(".env.%s", env)
+	viper.SetConfigFile(configFile)
+
 	if err := viper.ReadInConfig(); err != nil {
-		// ถ้าไม่เจอไฟล์เฉพาะ environment ให้ใช้ .env ปกติ
+		// Fall back to default .env file if specific environment file not found
 		viper.SetConfigFile(".env")
 		if err := viper.ReadInConfig(); err != nil {
 			return nil, fmt.Errorf("error loading config file: %w", err)
 		}
 	}
-
-	viper.AutomaticEnv()
 
 	// Setup Database
 	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable",
@@ -91,7 +92,7 @@ func Load() (*Config, error) {
 		viper.GetString("DB_PASSWORD"),
 		viper.GetString("DB_NAME"),
 	)
-	fmt.Println("dsn", dsn)
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)

@@ -112,3 +112,12 @@ func (r *authRepository) FindUserByID(id uint) (*domain.User, error) {
 	}
 	return &user, nil
 }
+
+// FindUserByUsername finds a user by their username
+func (r *authRepository) FindUserByUsername(username string) (*domain.User, error) {
+	var user domain.User
+	if err := r.db.Where("username = ?", username).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}

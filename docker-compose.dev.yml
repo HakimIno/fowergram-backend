@@ -2,17 +2,17 @@ services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_USER: fowergram
-      POSTGRES_PASSWORD: fowergram
-      POSTGRES_DB: fowergram
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: fowergram_dev
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - fowergram-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U fowergram"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -33,7 +33,7 @@ services:
       retries: 5
 
   redpanda:
-    image: vectorized/redpanda:v22.3.11
+    image: redpandadata/redpanda:latest
     command:
       - redpanda
       - start
@@ -63,7 +63,7 @@ services:
     image: migrate/migrate
     volumes:
       - ./migrations/postgres:/migrations
-    command: ["-path", "/migrations", "-database",  "postgres://fowergram:fowergram@postgres:5432/fowergram?sslmode=disable", "up"]
+    command: ["-path", "/migrations", "-database",  "postgres://postgres:postgres@postgres:5432/fowergram_dev?sslmode=disable", "up"]
     networks:
       - fowergram-network
     depends_on:

@@ -12,7 +12,7 @@ func (e *AuthError) Error() string {
 var (
 	ErrInvalidCredentials = &AuthError{
 		Code:    "AUTH001",
-		Message: "Invalid email or password",
+		Message: "Invalid username/email or password",
 	}
 	ErrAccountLocked = &AuthError{
 		Code:    "AUTH002",

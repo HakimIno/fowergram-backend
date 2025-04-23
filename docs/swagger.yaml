@@ -43,8 +43,16 @@ components:
           type: string
         email:
           type: string
+          description: Optional email address
         password:
           type: string
+        birth_date:
+          type: string
+          format: date
+          description: Optional birth date in YYYY-MM-DD format
+      required:
+        - username
+        - password
     LoginRequest:
       type: object
       properties:
@@ -67,4 +75,9 @@ components:
         username:
           type: string
         email:
-          type: string 
+          type: string
+          description: Optional email address
+        birth_date:
+          type: string
+          format: date
+          description: Birth date in YYYY-MM-DD format 

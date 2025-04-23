@@ -1,14 +1,15 @@
 package domain
 
 type RegisterRequest struct {
-	Username string `json:"username" validate:"required,min=3,max=32"`
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Username  string `json:"username" validate:"required,min=3,max=32"`
+	Email     string `json:"email,omitempty" validate:"omitempty,email"`
+	Password  string `json:"password" validate:"required"`
+	BirthDate string `json:"birth_date,omitempty" validate:"omitempty"`
 }
 
 type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Identifier string `json:"identifier" validate:"required"`
+	Password   string `json:"password" validate:"required"`
 }
 
 type UpdateUserRequest struct {

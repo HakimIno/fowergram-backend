@@ -10,7 +10,7 @@ import (
 // AuthService handles authentication related operations
 type AuthService interface {
 	Register(user *domain.User) error
-	Login(email, password string, deviceInfo *domain.DeviceSession) (*domain.User, string, error)
+	Login(identifier, password string, deviceInfo *domain.DeviceSession) (*domain.User, string, error)
 	ValidateToken(token string) (*domain.User, error)
 	RefreshToken(refreshToken string) (string, error)
 	ValidateLoginCode(userID uint, code string) error
