@@ -60,7 +60,19 @@ cp .env.example .env
 go run cmd/api/main.go
 ```
 
-5. Run tests:
+5. Run with hot reload (recommended for development):
+```bash
+# Install Air (if not already installed)
+go install github.com/cosmtrek/air@latest
+
+# Run with hot reload using make
+make dev
+
+# Or run Air directly
+air
+```
+
+6. Run tests:
 ```bash
 go test -v ./...
 ```
