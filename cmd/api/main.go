@@ -82,7 +82,7 @@ func main() {
 	routes.SetupHealthRoutes(app)
 	api := app.Group("/api/v1")
 	routes.SetupAuthRoutes(api, authHandler)
-	routes.SetupUserRoutes(api, userHandler)
+	routes.SetupUserRoutes(api, userHandler, cfg.JWT.Secret)
 
 	// Setup chat dependencies and routes
 	redpandaBroker, err := redpanda.NewRedpandaBroker([]string{cfg.Redpanda.Broker})

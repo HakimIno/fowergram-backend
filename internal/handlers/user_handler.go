@@ -157,3 +157,130 @@ func (h *UserHandler) CheckEmailAvailability(c *fiber.Ctx) error {
 		"available": true,
 	})
 }
+
+// GetMe retrieves the currently authenticated user's profile
+func (h *UserHandler) GetMe(c *fiber.Ctx) error {
+	startTime := time.Now()
+
+	// Try to get user_id from context in a safer way
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Unauthorized - missing user ID",
+		})
+	}
+
+	// Handle different numeric types
+	var userID uint
+	switch v := userIDRaw.(type) {
+	case uint:
+		userID = v
+	case int:
+		userID = uint(v)
+	case float64:
+		userID = uint(v)
+	case int64:
+		userID = uint(v)
+	default:
+		fmt.Printf("Unexpected type for user_id: %T\n", userIDRaw)
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Unauthorized - invalid user ID format",
+		})
+	}
+
+	if userID == 0 {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Unauthorized - zero user ID",
+		})
+	}
+
+	fmt.Printf("Processing GetMe for user ID: %d\n", userID)
+
+	// Get user from service (it already handles caching internally)
+	user, err := h.userService.GetUserByID(userID)
+	if err != nil {
+		fmt.Printf("Error getting user: %v\n", err)
+		return c.Status(404).JSON(fiber.Map{
+			"error": "User not found",
+		})
+	}
+
+	totalTime := time.Since(startTime)
+	fmt.Printf("GetMe took: %v\n", totalTime)
+
+	return c.JSON(user)
+}
+
+// UpdateProfilePicture updates the current user's profile picture
+func (h *UserHandler) UpdateProfilePicture(c *fiber.Ctx) error {
+	startTime := time.Now()
+
+	// Try to get user_id from context in a safer way
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Unauthorized - missing user ID",
+		})
+	}
+
+	// Handle different numeric types
+	var userID uint
+	switch v := userIDRaw.(type) {
+	case uint:
+		userID = v
+	case int:
+		userID = uint(v)
+	case float64:
+		userID = uint(v)
+	case int64:
+		userID = uint(v)
+	default:
+		fmt.Printf("Unexpected type for user_id: %T\n", userIDRaw)
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Unauthorized - invalid user ID format",
+		})
+	}
+
+	if userID == 0 {
+		return c.Status(401).JSON(fiber.Map{
+			"error": "Unauthorized - zero user ID",
+		})
+	}
+
+	fmt.Printf("Processing UpdateProfilePicture for user ID: %d\n", userID)
+
+	// Parse request body
+	type ProfilePictureRequest struct {
+		ProfilePicture string `json:"profile_picture" validate:"required"`
+	}
+
+	req := new(ProfilePictureRequest)
+	if err := c.BodyParser(req); err != nil {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Invalid request format",
+		})
+	}
+
+	// Validate request
+	if req.ProfilePicture == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Profile picture URL is required",
+		})
+	}
+
+	// Update profile picture
+	if err := h.userService.UpdateProfilePicture(userID, req.ProfilePicture); err != nil {
+		fmt.Printf("Error updating profile picture: %v\n", err)
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to update profile picture",
+		})
+	}
+
+	totalTime := time.Since(startTime)
+	fmt.Printf("UpdateProfilePicture took: %v\n", totalTime)
+
+	return c.JSON(fiber.Map{
+		"success": true,
+		"message": "Profile picture updated successfully",
+	})
+}

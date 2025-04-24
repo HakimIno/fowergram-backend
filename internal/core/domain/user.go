@@ -8,6 +8,7 @@ type User struct {
 	Email               string     `json:"email,omitempty" gorm:"unique"`
 	PasswordHash        string     `json:"-" gorm:"not null"`
 	BirthDate           *time.Time `json:"birth_date,omitempty" gorm:"default:null"`
+	ProfilePicture      string     `json:"profile_picture,omitempty" gorm:"default:''"`
 	IsEmailVerified     bool       `json:"is_email_verified" gorm:"default:false"`
 	RecoveryEmail       string     `json:"recovery_email,omitempty"`
 	FailedLoginAttempts int        `json:"-" gorm:"default:0"`

@@ -30,6 +30,7 @@ type UserService interface {
 	GetUserByEmail(email string) (*domain.User, error)
 	GetUserByUsername(username string) (*domain.User, error)
 	UpdateUser(user *domain.User) error
+	UpdateProfilePicture(userID uint, profilePicture string) error
 	DeleteUser(id uint) error
 	GetUsers(page, limit int) ([]*domain.User, error)
 	GetUsersFromCache(cacheKey string) ([]*domain.User, error)

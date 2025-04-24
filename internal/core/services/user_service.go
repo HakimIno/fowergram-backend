@@ -181,3 +181,27 @@ func (s *userService) GetUserByUsername(username string) (*domain.User, error) {
 
 	return user, nil
 }
+
+func (s *userService) UpdateProfilePicture(userID uint, profilePicture string) error {
+	// Get the user first
+	user, err := s.GetUserByID(userID)
+	if err != nil {
+		return err
+	}
+
+	// Update the profile picture
+	user.ProfilePicture = profilePicture
+	if err := s.userRepo.Update(user); err != nil {
+		return err
+	}
+
+	// Clear cache async
+	go func() {
+		cacheKey := fmt.Sprintf("user:%d", user.ID)
+		if err := s.cacheRepo.Delete(cacheKey); err != nil {
+			fmt.Printf("failed to clear user cache: %v\n", err)
+		}
+	}()
+
+	return nil
+}
