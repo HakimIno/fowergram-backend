@@ -55,3 +55,12 @@ func (r *userRepository) FindAll(page, limit int) ([]*domain.User, error) {
 
 	return users, nil
 }
+
+func (r *userRepository) FindByUsername(username string) (*domain.User, error) {
+	var user domain.User
+	err := r.db.Where("username = ?", username).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}

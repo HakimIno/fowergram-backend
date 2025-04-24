@@ -150,3 +150,34 @@ func (s *userService) DeleteUser(id uint) error {
 
 	return nil
 }
+
+func (s *userService) GetUserByUsername(username string) (*domain.User, error) {
+	// Try to get from cache first
+	cacheKey := fmt.Sprintf("user:username:%s", username)
+	if cached, err := s.cacheRepo.Get(cacheKey); err == nil {
+		if userData, ok := cached.(map[string]interface{}); ok {
+			// Convert cached data to User struct
+			userBytes, err := json.Marshal(userData)
+			if err == nil {
+				var user domain.User
+				if err := json.Unmarshal(userBytes, &user); err == nil {
+					return &user, nil
+				}
+			}
+		}
+	}
+
+	// If not in cache or error, get from database
+	user, err := s.userRepo.FindByUsername(username)
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache the user data
+	if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("failed to cache user data: %v\n", err)
+	}
+
+	return user, nil
+}

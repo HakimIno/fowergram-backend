@@ -77,3 +77,83 @@ func (h *UserHandler) GetUsers(c *fiber.Ctx) error {
 
 	return c.JSON(users)
 }
+
+// CheckUsernameAvailability checks if a username is available
+func (h *UserHandler) CheckUsernameAvailability(c *fiber.Ctx) error {
+	startTime := time.Now()
+
+	username := c.Query("username")
+	if username == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Username is required",
+		})
+	}
+
+	// Try to get the user with this username
+	user, err := h.userService.GetUserByUsername(username)
+
+	// If user is found, username is taken
+	if err == nil && user != nil {
+		totalTime := time.Since(startTime)
+		fmt.Printf("CheckUsernameAvailability took: %v\n", totalTime)
+
+		return c.JSON(fiber.Map{
+			"available": false,
+		})
+	}
+
+	// If error is not "record not found", it's a server error
+	if err != nil && err.Error() != "record not found" {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to check username availability",
+		})
+	}
+
+	// Otherwise, username is available
+	totalTime := time.Since(startTime)
+	fmt.Printf("CheckUsernameAvailability took: %v\n", totalTime)
+
+	return c.JSON(fiber.Map{
+		"available": true,
+	})
+}
+
+// CheckEmailAvailability checks if an email is available
+func (h *UserHandler) CheckEmailAvailability(c *fiber.Ctx) error {
+	startTime := time.Now()
+
+	email := c.Query("email")
+	if email == "" {
+		return c.Status(400).JSON(fiber.Map{
+			"error": "Email is required",
+		})
+	}
+
+	// Try to get the user with this email
+	user, err := h.userService.GetUserByEmail(email)
+
+	// If user is found, email is taken
+	if err == nil && user != nil {
+		totalTime := time.Since(startTime)
+		fmt.Printf("CheckEmailAvailability took: %v\n", totalTime)
+
+		return c.JSON(fiber.Map{
+			"available": false,
+		})
+	}
+
+	// If error is not "record not found", it's a server error
+	if err != nil && err.Error() != "record not found" {
+		return c.Status(500).JSON(fiber.Map{
+			"error": "Failed to check email availability",
+		})
+	}
+
+	// Otherwise, email is available
+	totalTime := time.Since(startTime)
+	fmt.Printf("CheckEmailAvailability took: %v\n", totalTime)
+
+	return c.JSON(fiber.Map{
+		"available": true,
+	})
+}
