@@ -78,13 +78,11 @@ func main() {
 	}))
 	app.Use(cors.New())
 
-	// Setup routes
 	routes.SetupHealthRoutes(app)
 	api := app.Group("/api/v1")
-	routes.SetupAuthRoutes(api, authHandler)
+	routes.SetupAuthRoutes(api, authHandler, cfg.JWT.Secret)
 	routes.SetupUserRoutes(api, userHandler, cfg.JWT.Secret)
 
-	// Setup chat dependencies and routes
 	redpandaBroker, err := redpanda.NewRedpandaBroker([]string{cfg.Redpanda.Broker})
 	if err != nil {
 		log.Error("Failed to connect to Redpanda", err,
@@ -93,7 +91,6 @@ func main() {
 	}
 	defer redpandaBroker.Close()
 
-	// Initialize ScyllaDB schema
 	if err := scylladb.InitializeSchema(cfg.ScyllaDB.Hosts, cfg.ScyllaDB.Keyspace); err != nil {
 		log.Error("Failed to initialize ScyllaDB schema", err,
 			logger.NewField("hosts", cfg.ScyllaDB.Hosts),
@@ -109,13 +106,11 @@ func main() {
 	}
 	defer chatRepo.Close()
 
-	// Initialize WebSocket manager
 	wsManager := service.NewWebSocketManager()
 	chatService := service.NewChatService(chatRepo, wsManager, redpandaBroker)
 	chatHandler := handler.NewChatHandler(chatService, wsManager)
 	routes.SetupChatRoutes(api, chatHandler, cfg.JWT.Secret)
 
-	// Graceful shutdown
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 

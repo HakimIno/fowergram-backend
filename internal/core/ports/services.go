@@ -10,9 +10,10 @@ import (
 // AuthService handles authentication related operations
 type AuthService interface {
 	Register(user *domain.User) error
-	Login(identifier, password string, deviceInfo *domain.DeviceSession) (*domain.User, string, error)
+	Login(identifier, password string, deviceInfo *domain.DeviceSession) (*domain.User, string, string, error)
 	ValidateToken(token string) (*domain.User, error)
-	RefreshToken(refreshToken string) (string, error)
+	ValidateStoredToken(token string) (*domain.User, error)
+	RefreshToken(refreshToken string) (string, string, error)
 	ValidateLoginCode(userID uint, code string) error
 	GetActiveSessions(userID uint) ([]*domain.DeviceSession, error)
 	RevokeSession(userID uint, deviceID string) error
@@ -21,6 +22,7 @@ type AuthService interface {
 	ValidateRecoveryCode(email, code string) error
 	ResetPassword(email, code, newPassword string) error
 	UpdateRecoveryEmail(userID uint, email string) error
+	SwitchAccount(currentUserID uint, request *domain.SwitchAccountRequest, deviceInfo *domain.DeviceSession) (*domain.User, string, string, error)
 }
 
 // UserService handles user related operations

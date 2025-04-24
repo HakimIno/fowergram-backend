@@ -58,3 +58,11 @@ type AccountRecovery struct {
 	ExpiresAt   time.Time `json:"expires_at"`
 	CreatedAt   time.Time `json:"created_at"`
 }
+
+// SwitchAccountRequest is used when switching between accounts
+type SwitchAccountRequest struct {
+	SwitchType  string `json:"switch_type" validate:"required,oneof=token password"` // Type of switch: token or password
+	Identifier  string `json:"identifier" validate:"required"`                       // Email or username of target account
+	Password    string `json:"password,omitempty"`                                   // Password (for password type)
+	StoredToken string `json:"stored_token,omitempty"`                               // Stored token (for token type)
+}

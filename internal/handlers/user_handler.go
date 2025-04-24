@@ -48,7 +48,6 @@ func (h *UserHandler) GetUsers(c *fiber.Ctx) error {
 	page := c.QueryInt("page", 1)
 	limit := c.QueryInt("limit", 10)
 
-	// Try to get from cache first
 	cacheKey := fmt.Sprintf("users:page:%d:limit:%d", page, limit)
 	users, err := h.userService.GetUsersFromCache(cacheKey)
 	if err == nil {
@@ -57,7 +56,6 @@ func (h *UserHandler) GetUsers(c *fiber.Ctx) error {
 		return c.JSON(users)
 	}
 
-	// If not in cache, get from database
 	users, err = h.userService.GetUsers(page, limit)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -65,7 +63,6 @@ func (h *UserHandler) GetUsers(c *fiber.Ctx) error {
 		})
 	}
 
-	// Cache the result async
 	go func() {
 		if err := h.userService.CacheUsers(cacheKey, users); err != nil {
 			fmt.Printf("failed to cache users: %v\n", err)

@@ -94,3 +94,22 @@ func ValidateToken(tokenString string, secret string) (*domain.User, error) {
 
 	return nil, fmt.Errorf("invalid token")
 }
+
+// ValidateRefreshTokenAsAccessToken validates a refresh token but treats it as an access token
+// This is useful for endpoints that should accept either token type
+func ValidateRefreshTokenAsAccessToken(tokenString string, secret string) (*domain.User, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		// Don't check the subject field here, so it works with both access and refresh tokens
+		return &domain.User{ID: claims.UserID}, nil
+	}
+
+	return nil, fmt.Errorf("invalid token")
+}

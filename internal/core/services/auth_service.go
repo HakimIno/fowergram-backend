@@ -64,7 +64,6 @@ func NewAuthService(
 func (s *authService) Register(user *domain.User) error {
 	startTime := time.Now()
 
-	// Hash password with lower cost for faster registration
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.PasswordHash), security.HashCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
@@ -75,7 +74,6 @@ func (s *authService) Register(user *domain.User) error {
 		logger.NewField("duration", hashTime),
 	)
 
-	// Create user
 	createStart := time.Now()
 	if err := s.authRepo.CreateUser(user); err != nil {
 		if strings.Contains(err.Error(), "duplicate key value") {
@@ -143,14 +141,12 @@ func (s *authService) Register(user *domain.User) error {
 	return nil
 }
 
-func (s *authService) Login(identifier, password string, deviceInfo *domain.DeviceSession) (*domain.User, string, error) {
+func (s *authService) Login(identifier, password string, deviceInfo *domain.DeviceSession) (*domain.User, string, string, error) {
 	startTime := time.Now()
 	metrics := &AuthMetrics{}
 
-	// Try to determine if identifier is email or username
 	isEmail := strings.Contains(identifier, "@")
 
-	// Try to get user from cache first
 	var cacheKey string
 	if isEmail {
 		cacheKey = fmt.Sprintf("user:email:%s", identifier)
@@ -196,7 +192,7 @@ func (s *authService) Login(identifier, password string, deviceInfo *domain.Devi
 			s.log.Error("User lookup failed", err,
 				logger.NewField("identifier", identifier),
 			)
-			return nil, "", &errors.AuthError{
+			return nil, "", "", &errors.AuthError{
 				Code:    "AUTH001",
 				Message: "Invalid identifier or password",
 			}
@@ -214,38 +210,33 @@ func (s *authService) Login(identifier, password string, deviceInfo *domain.Devi
 
 	// Check if account is locked
 	if user.AccountLockedUntil != nil && user.AccountLockedUntil.After(time.Now()) {
-		return nil, "", &errors.AuthError{
+		return nil, "", "", &errors.AuthError{
 			Code:    "AUTH002",
 			Message: "Account is locked due to too many failed attempts",
 		}
 	}
 
-	// Verify password with lower cost
 	pwStart := time.Now()
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		s.log.Warn("Password verification failed",
 			logger.NewField("user_id", user.ID),
 			logger.NewField("attempts", user.FailedLoginAttempts+1),
 		)
-		// Increment failed login attempts
 		user.FailedLoginAttempts++
 		now := time.Now()
 		user.LastFailedLogin = &now
 
-		// Lock account if too many failed attempts
 		if user.FailedLoginAttempts >= 5 {
 			lockUntil := time.Now().Add(15 * time.Minute)
 			user.AccountLockedUntil = &lockUntil
 		}
 
-		// Update user in database
 		if err := s.authRepo.UpdateUser(user); err != nil {
 			s.log.Error("Failed to update user failed attempts", err,
 				logger.NewField("user_id", user.ID),
 			)
 		}
 
-		// Update cache
 		go func() {
 			if err := s.cacheRepo.Set(cacheKey, user, 24*time.Hour); err != nil {
 				s.log.Error("Failed to update user cache", err,
@@ -255,42 +246,36 @@ func (s *authService) Login(identifier, password string, deviceInfo *domain.Devi
 		}()
 
 		if user.AccountLockedUntil != nil {
-			return nil, "", &errors.AuthError{
+			return nil, "", "", &errors.AuthError{
 				Code:    "AUTH002",
 				Message: "Account is locked due to too many failed attempts",
 			}
 		}
 
-		return nil, "", &errors.AuthError{
+		return nil, "", "", &errors.AuthError{
 			Code:    "AUTH001",
 			Message: "Invalid identifier or password",
 		}
 	}
 
-	// Reset failed login attempts on successful login
 	user.FailedLoginAttempts = 0
 	user.LastFailedLogin = nil
 	user.AccountLockedUntil = nil
 	if err := s.authRepo.UpdateUser(user); err != nil {
-		s.log.Error("Failed to reset failed attempts", err) // logger.NewField("user_id", user.ID),
+		s.log.Error("Failed to reset failed attempts", err)
 
 	}
 
 	pwTime := time.Since(pwStart)
 	metrics.PasswordVerify = pwTime
-	// s.log.Info("Password verification completed",
-	// 	logger.NewField("duration", pwTime),
-	// )
 
-	// Create a channel to receive location
 	locationChan := make(chan string, 1)
 
-	// Get location from IP fully async
-	deviceInfo.SetLocation("Unknown") // Set default
+	deviceInfo.SetLocation("Unknown")
 	go func() {
 		location, err := s.geoService.GetLocation(deviceInfo.IPAddress)
 		if err != nil {
-			s.log.Error("Failed to get location", err) // logger.NewField("ip_address", deviceInfo.IPAddress),
+			s.log.Error("Failed to get location", err)
 
 			locationChan <- "Unknown"
 			return
@@ -298,11 +283,10 @@ func (s *authService) Login(identifier, password string, deviceInfo *domain.Devi
 		locationChan <- location
 	}()
 
-	// Generate device ID if not provided
 	if deviceInfo.DeviceID == "" {
 		deviceID, err := security.GenerateDeviceID()
 		if err != nil {
-			s.log.Error("Failed to generate device ID", err) // logger.NewField("user_id", user.ID),
+			s.log.Error("Failed to generate device ID", err)
 
 			deviceInfo.DeviceID = "unknown"
 		} else {
@@ -312,25 +296,23 @@ func (s *authService) Login(identifier, password string, deviceInfo *domain.Devi
 
 	// Token generation
 	tokenStart := time.Now()
-	token, err := s.generateJWT(user)
+	accessToken, refreshToken, err := s.generateJWT(user)
 	if err != nil {
-		s.log.Error("Token generation failed", err) // logger.NewField("user_id", user.ID),
-
-		return nil, "", fmt.Errorf("failed to generate token: %w", err)
+		s.log.Error("Token generation failed", err)
+		return nil, "", "", &errors.AuthError{
+			Code:    "AUTH005",
+			Message: "Authentication error",
+		}
 	}
 	metrics.TokenGeneration = time.Since(tokenStart)
 
-	// Wait for location with timeout
 	select {
 	case location := <-locationChan:
 		deviceInfo.SetLocation(location)
 	case <-time.After(100 * time.Millisecond):
-		// Use default "Unknown" if timeout
 	}
 
-	// Log login and send notifications fully async
 	go func() {
-		// Log login
 		loginHistory := &domain.LoginHistory{
 			UserID:    user.ID,
 			DeviceID:  deviceInfo.DeviceID,
@@ -345,7 +327,6 @@ func (s *authService) Login(identifier, password string, deviceInfo *domain.Devi
 			)
 		}
 
-		// Send notification
 		if err := s.emailService.SendLoginNotification(user.Email, deviceInfo); err != nil {
 			s.log.Error("Failed to send login notification", err,
 				logger.NewField("user_id", user.ID),
@@ -356,17 +337,15 @@ func (s *authService) Login(identifier, password string, deviceInfo *domain.Devi
 	metrics.TotalTime = time.Since(startTime)
 	s.logAuthMetrics(metrics)
 
-	return user, token, nil
+	return user, accessToken, refreshToken, nil
 }
 
 func (s *authService) ValidateToken(token string) (*domain.User, error) {
-	// Validate JWT token
 	userID, err := security.ValidateJWT(token, s.jwtSecret)
 	if err != nil {
 		return nil, errors.ErrInvalidToken
 	}
 
-	// Get user from database
 	user, err := s.authRepo.FindUserByID(userID)
 	if err != nil {
 		return nil, errors.ErrUserNotFound
@@ -375,32 +354,37 @@ func (s *authService) ValidateToken(token string) (*domain.User, error) {
 	return user, nil
 }
 
-// RefreshToken creates a new access token if the refresh token is valid
-func (s *authService) RefreshToken(refreshToken string) (string, error) {
-	// Validate refresh token
+func (s *authService) RefreshToken(refreshToken string) (string, string, error) {
 	userID, err := security.ValidateRefreshToken(refreshToken, s.jwtSecret)
 	if err != nil {
-		return "", errors.ErrInvalidRefreshToken
+		return "", "", errors.ErrInvalidRefreshToken
 	}
 
-	// Get user from database
 	user, err := s.authRepo.FindUserByID(userID)
 	if err != nil {
-		return "", errors.ErrUserNotFound
+		return "", "", errors.ErrUserNotFound
 	}
 
-	// Generate new access token
-	newToken, err := s.generateJWT(user)
+	accessToken, newRefreshToken, err := s.generateJWT(user)
 	if err != nil {
-		return "", fmt.Errorf("failed to generate token: %w", err)
+		return "", "", fmt.Errorf("failed to generate tokens: %w", err)
 	}
 
-	return newToken, nil
+	return accessToken, newRefreshToken, nil
 }
 
-func (s *authService) generateJWT(user *domain.User) (string, error) {
-	// Generate access token with 15 minutes expiration
-	return security.GenerateJWT(user.ID, s.jwtSecret, 15*time.Minute)
+func (s *authService) generateJWT(user *domain.User) (string, string, error) {
+	accessToken, err := security.GenerateJWT(user.ID, s.jwtSecret, 15*time.Minute)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate access token: %w", err)
+	}
+
+	refreshToken, err := security.GenerateRefreshToken(user.ID, s.jwtSecret, 30*24*time.Hour)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to generate refresh token: %w", err)
+	}
+
+	return accessToken, refreshToken, nil
 }
 
 func (s *authService) ValidateLoginCode(userID uint, code string) error {
@@ -412,7 +396,6 @@ func (s *authService) GetActiveSessions(userID uint) ([]*domain.DeviceSession, e
 }
 
 func (s *authService) RevokeSession(userID uint, deviceID string) error {
-	// Do the session revocation async since it's not critical for immediate logout
 	go func() {
 		if err := s.authRepo.RevokeSession(userID, deviceID); err != nil {
 			s.log.Error("Failed to revoke session", err,
@@ -422,7 +405,6 @@ func (s *authService) RevokeSession(userID uint, deviceID string) error {
 		}
 	}()
 
-	// Clear user cache immediately
 	cacheKey := fmt.Sprintf("user:%d", userID)
 	if err := s.cacheRepo.Delete(cacheKey); err != nil {
 		s.log.Error("Failed to clear user cache", err,
@@ -511,4 +493,230 @@ func (s *authService) logAuthMetrics(metrics *AuthMetrics) {
 // Helper function to format duration
 func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%.2fms", float64(d.Microseconds())/1000)
+}
+
+// ValidateStoredToken validates a token and returns the associated user
+func (s *authService) ValidateStoredToken(token string) (*domain.User, error) {
+	// Validate JWT token
+	userID, err := security.ValidateJWT(token, s.jwtSecret)
+	if err != nil {
+		s.log.Error("Failed to validate stored token", err)
+		return nil, errors.ErrInvalidToken
+	}
+
+	// Get user from database
+	user, err := s.authRepo.FindUserByID(userID)
+	if err != nil {
+		s.log.Error("User not found for token", err,
+			logger.NewField("user_id", userID),
+		)
+		return nil, errors.ErrUserNotFound
+	}
+
+	return user, nil
+}
+
+func (s *authService) SwitchAccount(currentUserID uint, request *domain.SwitchAccountRequest, deviceInfo *domain.DeviceSession) (*domain.User, string, string, error) {
+	startTime := time.Now()
+	metrics := &AuthMetrics{}
+
+	// Log the switch account attempt
+	s.log.Info("Switch account attempt",
+		logger.NewField("current_user_id", currentUserID),
+		logger.NewField("switch_type", request.SwitchType),
+		logger.NewField("target_identifier", request.Identifier),
+	)
+
+	var user *domain.User
+	var err error
+
+	// ตรวจสอบประเภทการสลับบัญชี
+	if request.SwitchType == "token" {
+		// กรณีใช้ token ที่เก็บไว้
+		tokenStart := time.Now()
+		user, err = s.ValidateStoredToken(request.StoredToken)
+		if err != nil {
+			s.log.Error("Invalid stored token", err,
+				logger.NewField("identifier", request.Identifier),
+			)
+			return nil, "", "", &errors.AuthError{
+				Code:    "AUTH007",
+				Message: "Invalid or expired token, please login with password",
+			}
+		}
+
+		metrics.TokenGeneration = time.Since(tokenStart)
+
+		// ตรวจสอบว่า identifier ตรงกับบัญชีที่ระบุหรือไม่
+		if user.Email != request.Identifier && user.Username != request.Identifier {
+			s.log.Error("Token-user mismatch", nil,
+				logger.NewField("token_user_id", user.ID),
+				logger.NewField("requested_identifier", request.Identifier),
+			)
+			return nil, "", "", &errors.AuthError{
+				Code:    "AUTH008",
+				Message: "Token doesn't match the requested account",
+			}
+		}
+	} else {
+		isEmail := strings.Contains(request.Identifier, "@")
+
+		var cacheKey string
+		if isEmail {
+			cacheKey = fmt.Sprintf("user:email:%s", request.Identifier)
+		} else {
+			cacheKey = fmt.Sprintf("user:username:%s", request.Identifier)
+		}
+
+		cacheDone := make(chan bool, 1)
+		go func() {
+			cacheStart := time.Now()
+			if cached, err := s.cacheRepo.Get(cacheKey); err == nil {
+				if userData, ok := cached.(*domain.User); ok {
+					user = userData
+				}
+			}
+			metrics.CacheLookup = time.Since(cacheStart)
+			cacheDone <- true
+		}()
+
+		select {
+		case <-cacheDone:
+			s.log.Debug("Cache lookup completed",
+				logger.NewField("duration", metrics.CacheLookup),
+				logger.NewField("cache_hit", user != nil),
+			)
+		case <-time.After(100 * time.Millisecond):
+			s.log.Warn("Cache lookup timed out")
+		}
+
+		dbStart := time.Now()
+		if user == nil {
+			if isEmail {
+				user, err = s.authRepo.FindUserByEmail(request.Identifier)
+			} else {
+				user, err = s.authRepo.FindUserByUsername(request.Identifier)
+			}
+
+			if err != nil {
+				s.log.Error("Target user lookup failed", err,
+					logger.NewField("identifier", request.Identifier),
+				)
+				return nil, "", "", &errors.AuthError{
+					Code:    "AUTH001",
+					Message: "Invalid credentials",
+				}
+			}
+		}
+		metrics.DatabaseOperations = time.Since(dbStart)
+
+		if user.AccountLockedUntil != nil && time.Now().Before(*user.AccountLockedUntil) {
+			s.log.Warn("Account is locked",
+				logger.NewField("user_id", user.ID),
+				logger.NewField("locked_until", user.AccountLockedUntil),
+			)
+
+			return nil, "", "", &errors.AuthError{
+				Code:    "AUTH002",
+				Message: "Account is locked due to too many failed attempts",
+			}
+		}
+
+		pwStart := time.Now()
+		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(request.Password)); err != nil {
+			s.log.Warn("Password verification failed",
+				logger.NewField("user_id", user.ID),
+			)
+
+			user.FailedLoginAttempts++
+			now := time.Now()
+			user.LastFailedLogin = &now
+
+			if user.FailedLoginAttempts >= 5 {
+				lockTime := now.Add(15 * time.Minute)
+				user.AccountLockedUntil = &lockTime
+				s.log.Warn("Account locked",
+					logger.NewField("user_id", user.ID),
+					logger.NewField("locked_until", lockTime),
+				)
+			}
+
+			if err := s.authRepo.UpdateUser(user); err != nil {
+				s.log.Error("Failed to update user after failed login", err,
+					logger.NewField("user_id", user.ID),
+				)
+			}
+
+			return nil, "", "", &errors.AuthError{
+				Code:    "AUTH001",
+				Message: "Invalid credentials",
+			}
+		}
+		metrics.PasswordVerify = time.Since(pwStart)
+
+		user.FailedLoginAttempts = 0
+		user.LastFailedLogin = nil
+		user.AccountLockedUntil = nil
+
+		if err := s.authRepo.UpdateUser(user); err != nil {
+			s.log.Error("Failed to update user after successful login", err,
+				logger.NewField("user_id", user.ID),
+			)
+		}
+	}
+
+	tokenStart := time.Now()
+	accessToken, refreshToken, err := s.generateJWT(user)
+	if err != nil {
+		s.log.Error("Failed to generate JWT", err,
+			logger.NewField("user_id", user.ID),
+		)
+		return nil, "", "", &errors.AuthError{
+			Code:    "AUTH005",
+			Message: "Authentication error",
+		}
+	}
+
+	if request.SwitchType != "token" {
+		metrics.TokenGeneration = time.Since(tokenStart)
+	}
+
+	go func() {
+		deviceInfo.UserID = user.ID
+		deviceInfo.LastActive = time.Now()
+
+		if deviceInfo.IPAddress != "" && deviceInfo.Location == "" {
+			location, err := s.geoService.GetLocation(deviceInfo.IPAddress)
+			if err == nil {
+				deviceInfo.SetLocation(location)
+			}
+		}
+
+		if err := s.authRepo.CreateDeviceSession(deviceInfo); err != nil {
+			s.log.Error("Failed to create device session", err,
+				logger.NewField("user_id", user.ID),
+			)
+		}
+
+		loginHistory := &domain.LoginHistory{
+			UserID:    user.ID,
+			DeviceID:  deviceInfo.DeviceID,
+			IPAddress: deviceInfo.IPAddress,
+			Location:  deviceInfo.Location,
+			UserAgent: deviceInfo.UserAgent,
+			Status:    "success",
+			CreatedAt: time.Now(),
+		}
+
+		if err := s.authRepo.LogLogin(loginHistory); err != nil {
+			s.log.Error("Failed to log login", err,
+				logger.NewField("user_id", user.ID),
+			)
+		}
+	}()
+
+	metrics.TotalTime = time.Since(startTime)
+	s.logAuthMetrics(metrics)
+
+	return user, accessToken, refreshToken, nil
 }
