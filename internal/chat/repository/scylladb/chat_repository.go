@@ -328,3 +328,21 @@ func (r *ChatRepository) DeleteInviteLink(ctx context.Context, chatID, code stri
 		"code":    code,
 	}).ExecRelease()
 }
+
+func (r *ChatRepository) GetChatMember(ctx context.Context, chatID, userID string) (*repository.ChatMember, error) {
+	stmt, names := chatMembersTable.Get()
+	q := r.session.Query(stmt, names).BindMap(qb.M{
+		"chat_id": chatID,
+		"user_id": userID,
+	})
+
+	var member repository.ChatMember
+	if err := q.WithContext(ctx).GetRelease(&member); err != nil {
+		if err == gocql.ErrNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &member, nil
+}

@@ -31,11 +31,24 @@ func NewChatHandler(chatService *service.ChatService, wsManager *service.WebSock
 func (h *ChatHandler) HandleWebSocket(c *websocket.Conn) {
 	userIDRaw := c.Locals("user_id")
 	if userIDRaw == nil {
+		c.Close()
 		return
 	}
-	userID := fmt.Sprintf("%d", userIDRaw)
+	userID := fmt.Sprintf("%v", userIDRaw)
+
+	// Update user status to online
+	ctx := context.Background()
+	if err := h.chatService.UpdateUserStatus(ctx, userID, "online"); err != nil {
+		c.Close()
+		return
+	}
+
 	h.wsManager.AddConnection(userID, c)
-	defer h.wsManager.RemoveConnection(userID, c)
+	defer func() {
+		// Update user status to offline when connection is closed
+		h.chatService.UpdateUserStatus(ctx, userID, "offline")
+		h.wsManager.RemoveConnection(userID, c)
+	}()
 
 	for {
 		messageType, message, err := c.ReadMessage()
@@ -52,7 +65,7 @@ func (h *ChatHandler) HandleWebSocket(c *websocket.Conn) {
 			msg.SenderID = userID
 			msg.CreatedAt = time.Now()
 
-			if err := h.chatService.HandleMessage(context.Background(), &msg); err != nil {
+			if err := h.chatService.HandleMessage(ctx, &msg); err != nil {
 				continue
 			}
 		}
@@ -71,7 +84,7 @@ func (h *ChatHandler) CreateChat(c *fiber.Ctx) error {
 	if userIDRaw == nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized: user_id not found in context")
 	}
-	userID := fmt.Sprintf("%d", userIDRaw)
+	userID := fmt.Sprintf("%v", userIDRaw)
 
 	var req CreateChatRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -210,7 +223,7 @@ func (h *ChatHandler) GetUserChats(c *fiber.Ctx) error {
 	if userIDRaw == nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
 	}
-	userID := fmt.Sprintf("%d", userIDRaw)
+	userID := fmt.Sprintf("%v", userIDRaw)
 
 	chats, err := h.chatService.GetUserChats(c.Context(), userID)
 	if err != nil {
@@ -234,7 +247,7 @@ func (h *ChatHandler) CreateInviteLink(c *fiber.Ctx) error {
 	if userIDRaw == nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
 	}
-	userID := fmt.Sprintf("%d", userIDRaw)
+	userID := fmt.Sprintf("%v", userIDRaw)
 
 	chatID := c.Params("chat_id")
 	if chatID == "" {
@@ -291,7 +304,7 @@ func (h *ChatHandler) JoinChatViaInvite(c *fiber.Ctx) error {
 	if userIDRaw == nil {
 		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
 	}
-	userID := fmt.Sprintf("%d", userIDRaw)
+	userID := fmt.Sprintf("%v", userIDRaw)
 
 	code := c.Params("code")
 	if code == "" {
@@ -327,4 +340,149 @@ func (h *ChatHandler) DeleteInviteLink(c *fiber.Ctx) error {
 	}
 
 	return c.SendStatus(fiber.StatusNoContent)
+}
+
+func (h *ChatHandler) GetChat(c *fiber.Ctx) error {
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
+	}
+	userID := fmt.Sprintf("%v", userIDRaw)
+
+	chatID := c.Params("chat_id")
+	chat, err := h.chatService.GetChat(c.Context(), chatID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to get chat: %v", err))
+	}
+
+	// Check if user is a member of the chat
+	isMember := false
+	for _, member := range chat.Members {
+		if member == userID {
+			isMember = true
+			break
+		}
+	}
+
+	if !isMember {
+		return fiber.NewError(fiber.StatusForbidden, "You are not a member of this chat")
+	}
+
+	return c.JSON(chat)
+}
+
+func (h *ChatHandler) AddChatMember(c *fiber.Ctx) error {
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
+	}
+	userID := fmt.Sprintf("%v", userIDRaw)
+
+	chatID := c.Params("chat_id")
+	memberID := c.Params("user_id")
+	role := c.Query("role", string(domain.ChatRoleMember))
+
+	// Check if the requesting user is an admin or owner of the chat
+	chat, err := h.chatService.GetChat(c.Context(), chatID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to get chat: %v", err))
+	}
+
+	isAdmin := false
+	for _, member := range chat.Members {
+		if member == userID {
+			memberRole, err := h.chatService.GetChatMemberRole(c.Context(), chatID, userID)
+			if err == nil && (memberRole == string(domain.ChatRoleAdmin) || memberRole == string(domain.ChatRoleOwner)) {
+				isAdmin = true
+				break
+			}
+		}
+	}
+
+	if !isAdmin {
+		return fiber.NewError(fiber.StatusForbidden, "You don't have permission to add members")
+	}
+
+	if err := h.chatService.AddChatMember(c.Context(), chatID, memberID, role); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to add member: %v", err))
+	}
+
+	return c.SendStatus(fiber.StatusOK)
+}
+
+func (h *ChatHandler) RemoveChatMember(c *fiber.Ctx) error {
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
+	}
+	userID := fmt.Sprintf("%v", userIDRaw)
+
+	chatID := c.Params("chat_id")
+	memberID := c.Params("user_id")
+
+	// Check if the requesting user is an admin or owner of the chat
+	chat, err := h.chatService.GetChat(c.Context(), chatID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to get chat: %v", err))
+	}
+
+	isAdmin := false
+	for _, member := range chat.Members {
+		if member == userID {
+			memberRole, err := h.chatService.GetChatMemberRole(c.Context(), chatID, userID)
+			if err == nil && (memberRole == string(domain.ChatRoleAdmin) || memberRole == string(domain.ChatRoleOwner)) {
+				isAdmin = true
+				break
+			}
+		}
+	}
+
+	if !isAdmin {
+		return fiber.NewError(fiber.StatusForbidden, "You don't have permission to remove members")
+	}
+
+	if err := h.chatService.RemoveChatMember(c.Context(), chatID, memberID); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to remove member: %v", err))
+	}
+
+	return c.SendStatus(fiber.StatusOK)
+}
+
+func (h *ChatHandler) UpdateChatMemberRole(c *fiber.Ctx) error {
+	userIDRaw := c.Locals("user_id")
+	if userIDRaw == nil {
+		return fiber.NewError(fiber.StatusUnauthorized, "Unauthorized")
+	}
+	userID := fmt.Sprintf("%v", userIDRaw)
+
+	chatID := c.Params("chat_id")
+	memberID := c.Params("user_id")
+	role := c.Query("role")
+
+	// Check if the requesting user is an owner of the chat
+	chat, err := h.chatService.GetChat(c.Context(), chatID)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to get chat: %v", err))
+	}
+
+	isOwner := false
+	for _, member := range chat.Members {
+		if member == userID {
+			memberRole, err := h.chatService.GetChatMemberRole(c.Context(), chatID, userID)
+			if err == nil && memberRole == string(domain.ChatRoleOwner) {
+				isOwner = true
+				break
+			}
+		}
+	}
+
+	if !isOwner {
+		return fiber.NewError(fiber.StatusForbidden, "Only chat owner can update member roles")
+	}
+
+	if err := h.chatService.UpdateChatMemberRole(c.Context(), chatID, memberID, role); err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Failed to update member role: %v", err))
+	}
+
+	return c.SendStatus(fiber.StatusOK)
 }

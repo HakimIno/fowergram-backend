@@ -288,3 +288,11 @@ func generateInviteCode() string {
 	}
 	return string(code)
 }
+
+func (s *ChatService) GetChatMemberRole(ctx context.Context, chatID, userID string) (string, error) {
+	member, err := s.repo.GetChatMember(ctx, chatID, userID)
+	if err != nil {
+		return "", err
+	}
+	return string(member.Role), nil
+}

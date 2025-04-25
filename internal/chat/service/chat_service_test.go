@@ -126,6 +126,14 @@ func (m *MockChatRepository) DeleteInviteLink(ctx context.Context, chatID, code 
 	return args.Error(0)
 }
 
+func (m *MockChatRepository) GetChatMember(ctx context.Context, chatID, userID string) (*repository.ChatMember, error) {
+	args := m.Called(ctx, chatID, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*repository.ChatMember), args.Error(1)
+}
+
 // MockMessageProducer is a mock implementation of broker.MessageProducer
 type MockMessageProducer struct {
 	mock.Mock

@@ -8,27 +8,30 @@ import (
 	"github.com/gofiber/websocket/v2"
 )
 
+// SetupChatRoutes sets up all chat-related routes with authentication middleware
 func SetupChatRoutes(api fiber.Router, chatHandler *handler.ChatHandler, jwtSecret string) {
 	chat := api.Group("/chat")
 
-	// Add auth middleware to all chat routes
-	chat.Use(middleware.ValidateAuth(jwtSecret))
+	// Apply JWT middleware to all chat routes
+	chat.Use(middleware.JWTMiddleware(jwtSecret))
 
-	chat.Use("/ws", func(c *fiber.Ctx) error {
-		if websocket.IsWebSocketUpgrade(c) {
-			c.Locals("allowed", true)
-			return c.Next()
-		}
-		return fiber.ErrUpgradeRequired
-	})
+	// WebSocket endpoint for real-time chat
 	chat.Get("/ws", websocket.New(chatHandler.HandleWebSocket))
-	chat.Post("/", chatHandler.CreateChat)
-	chat.Get("/:id/messages", chatHandler.GetMessages)
-	chat.Get("/user/:id", chatHandler.GetUserChats)
 
-	// Invite link routes
-	chat.Post("/:chat_id/invite", chatHandler.CreateInviteLink)
-	chat.Get("/:chat_id/invite", chatHandler.GetChatInviteLinks)
-	chat.Delete("/:chat_id/invite/:code", chatHandler.DeleteInviteLink)
+	// Chat management endpoints
+	chat.Post("/", chatHandler.CreateChat)
+	chat.Get("/", chatHandler.GetUserChats)
+	chat.Get("/:chat_id/messages", chatHandler.GetMessages)
+	chat.Get("/:chat_id", chatHandler.GetChat)
+
+	// Chat member management
+	chat.Post("/:chat_id/members", chatHandler.AddChatMember)
+	chat.Delete("/:chat_id/members/:user_id", chatHandler.RemoveChatMember)
+	chat.Put("/:chat_id/members/:user_id/role", chatHandler.UpdateChatMemberRole)
+
+	// Invite link management
+	chat.Post("/:chat_id/invite-links", chatHandler.CreateInviteLink)
+	chat.Get("/:chat_id/invite-links", chatHandler.GetChatInviteLinks)
 	chat.Post("/join/:code", chatHandler.JoinChatViaInvite)
+	chat.Delete("/:chat_id/invite-links/:code", chatHandler.DeleteInviteLink)
 }

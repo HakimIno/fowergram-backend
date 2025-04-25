@@ -103,4 +103,5 @@ type ChatRepository interface {
 	GetChatInviteLinks(ctx context.Context, chatID string) ([]ChatInviteLink, error)
 	IncrementInviteLinkUses(ctx context.Context, chatID, code string) error
 	DeleteInviteLink(ctx context.Context, chatID, code string) error
+	GetChatMember(ctx context.Context, chatID, userID string) (*ChatMember, error)
 }

@@ -1,79 +1,103 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Chat Test</title>
+    <title>Fowergram Chat Test</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             max-width: 1200px;
             margin: 0 auto;
             padding: 20px;
+            background-color: #f5f5f5;
         }
         .container {
             display: flex;
             gap: 20px;
+            flex-wrap: wrap;
         }
         .auth-section {
             width: 300px;
+            background-color: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .chat-section {
             flex-grow: 1;
+            min-width: 300px;
+            background-color: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
         .form-group {
             margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 8px;
         }
         .form-group label {
             display: block;
             margin-bottom: 5px;
+            font-weight: bold;
         }
         .form-group input {
             width: 100%;
             padding: 8px;
             margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
         button {
             padding: 8px 15px;
-            background-color: #4CAF50;
+            background-color: #1e88e5;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            transition: background-color 0.3s;
         }
         button:hover {
-            background-color: #45a049;
+            background-color: #1565c0;
         }
         #messages {
             height: 400px;
             overflow-y: auto;
-            border: 1px solid #ccc;
+            border: 1px solid #ddd;
             padding: 10px;
             margin-bottom: 10px;
             background-color: #f9f9f9;
+            border-radius: 8px;
         }
         .message {
             margin: 5px 0;
             padding: 8px;
-            border-radius: 5px;
+            border-radius: 8px;
             max-width: 70%;
+            word-break: break-word;
         }
         .sent {
             background-color: #e3f2fd;
             margin-left: auto;
+            border: 1px solid #bbdefb;
         }
         .received {
             background-color: #f5f5f5;
+            border: 1px solid #e0e0e0;
         }
         .system {
             background-color: #fff3e0;
             max-width: 100%;
             text-align: center;
             font-style: italic;
+            border: 1px solid #ffe0b2;
         }
         .error {
             background-color: #ffebee;
             max-width: 100%;
             text-align: center;
             color: #c62828;
+            border: 1px solid #ffcdd2;
         }
         .chat-input {
             display: flex;
@@ -82,51 +106,125 @@
         .chat-input input {
             flex-grow: 1;
             padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
         }
-        #userList {
+        #userList, #chatList {
             margin-top: 20px;
-            border: 1px solid #ccc;
+            border: 1px solid #ddd;
             padding: 10px;
+            border-radius: 8px;
+            background-color: #fafafa;
         }
-        .user-item {
-            padding: 5px;
+        .list-item {
+            padding: 8px;
+            margin: 4px 0;
             cursor: pointer;
+            border-radius: 4px;
+            transition: background-color 0.2s;
         }
-        .user-item:hover {
-            background-color: #f0f0f0;
+        .list-item:hover {
+            background-color: #e3f2fd;
+        }
+        .active {
+            background-color: #bbdefb;
+            font-weight: bold;
+        }
+        .connection-status {
+            margin-top: 10px;
+            padding: 5px;
+            text-align: center;
+            border-radius: 4px;
+        }
+        .connected {
+            background-color: #c8e6c9;
+            color: #2e7d32;
+        }
+        .disconnected {
+            background-color: #ffcdd2;
+            color: #c62828;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 15px;
+        }
+        .tab {
+            padding: 8px 15px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            background-color: #f5f5f5;
+        }
+        .tab.active {
+            background-color: #1e88e5;
+            color: white;
+            border-color: #1e88e5;
+        }
+        .tab:first-child {
+            border-radius: 4px 0 0 4px;
+        }
+        .tab:last-child {
+            border-radius: 0 4px 4px 0;
+        }
+        .hidden {
+            display: none;
+        }
+        .message-time {
+            font-size: 11px;
+            color: #757575;
+            text-align: right;
+            margin-top: 4px;
+        }
+        .message-sender {
+            font-weight: bold;
+            margin-bottom: 4px;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="auth-section">
-            <h2>Authentication</h2>
+            <h2>Fowergram Chat</h2>
+            <div class="tabs">
+                <div class="tab active" onclick="showTab('login')">Login</div>
+                <div class="tab" onclick="showTab('register')">Register</div>
+            </div>
+            
+            <!-- Login Form -->
+            <div id="loginTab" class="form-group">
+                <input type="email" id="loginEmail" placeholder="Email">
+                <input type="password" id="loginPassword" placeholder="Password">
+                <button onclick="login()">Login</button>
+            </div>
+
             <!-- Register Form -->
-            <div class="form-group">
-                <h3>Register</h3>
+            <div id="registerTab" class="form-group hidden">
                 <input type="text" id="regUsername" placeholder="Username">
                 <input type="email" id="regEmail" placeholder="Email">
                 <input type="password" id="regPassword" placeholder="Password">
                 <button onclick="register()">Register</button>
             </div>
 
-            <!-- Login Form -->
-            <div class="form-group">
-                <h3>Login</h3>
-                <input type="email" id="loginEmail" placeholder="Email">
-                <input type="password" id="loginPassword" placeholder="Password">
-                <button onclick="login()">Login</button>
+            <div id="connectionStatus" class="connection-status disconnected">
+                Disconnected
             </div>
 
-            <!-- User List -->
-            <div id="userList">
-                <h3>Users</h3>
+            <!-- Chat Lists -->
+            <div id="chatList" class="hidden">
+                <h3>Your Chats</h3>
+                <div id="chatListContent"></div>
+                <button onclick="showNewChatUI()" style="margin-top: 10px; width: 100%;">New Chat</button>
+            </div>
+
+            <!-- User List for New Chat -->
+            <div id="userList" class="hidden">
+                <h3>Start New Chat</h3>
                 <div id="userListContent"></div>
+                <button onclick="hideNewChatUI()" style="margin-top: 10px; width: 100%;">Back to Chats</button>
             </div>
         </div>
 
         <div class="chat-section">
-            <h2>Chat</h2>
+            <h2>Messages</h2>
             <div id="messages"></div>
             <div class="chat-input">
                 <input type="text" id="messageInput" placeholder="Type a message" onkeypress="handleKeyPress(event)">
@@ -140,8 +238,24 @@
         let currentUserId = null;
         let currentChatId = null;
         let authToken = null;
+        let selectedChatName = null;
         const API_BASE = 'http://localhost:8080/api/v1';
         const messagesDiv = document.getElementById('messages');
+        const connectionStatus = document.getElementById('connectionStatus');
+        let pingInterval = null;
+        let lastPongTime = 0;
+        let reconnectAttempts = 0;
+        const MAX_RECONNECT_ATTEMPTS = 5;
+
+        // Tab Functions
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelector(`.tab[onclick="showTab('${tabName}')"]`).classList.add('active');
+            
+            document.getElementById('loginTab').classList.add('hidden');
+            document.getElementById('registerTab').classList.add('hidden');
+            document.getElementById(`${tabName}Tab`).classList.remove('hidden');
+        }
 
         // Auth Functions
         async function register() {
@@ -149,18 +263,29 @@
             const email = document.getElementById('regEmail').value;
             const password = document.getElementById('regPassword').value;
 
+            if (!username || !email || !password) {
+                appendMessage('System', 'Please fill all fields', 'error');
+                return;
+            }
+
             try {
                 const response = await fetch(`${API_BASE}/auth/register`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ username, email, password }),
+                    body: JSON.stringify({ 
+                        username: username,
+                        email: email, 
+                        password: password 
+                    }),
                 });
 
                 const data = await response.json();
                 if (response.ok) {
                     appendMessage('System', 'Registration successful! Please login.', 'system');
+                    showTab('login');
+                    document.getElementById('loginEmail').value = email;
                 } else {
                     throw new Error(data.error || 'Registration failed');
                 }
@@ -173,116 +298,307 @@
             const email = document.getElementById('loginEmail').value;
             const password = document.getElementById('loginPassword').value;
 
+            if (!email || !password) {
+                appendMessage('System', 'Please enter email and password', 'error');
+                return;
+            }
+
+            const requestBody = { 
+                identifier: email,
+                password: password 
+            };
+            
+            console.log('Login request payload:', JSON.stringify(requestBody));
+            appendMessage('System', 'Logging in...', 'system');
+
             try {
                 const response = await fetch(`${API_BASE}/auth/login`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ email, password }),
+                    body: JSON.stringify(requestBody),
                 });
 
-                const data = await response.json();
-                console.log('Login response:', data);
-
-                if (response.ok) {
-                    authToken = data.token;
-                    currentUserId = data.user.id.toString();
-                    appendMessage('System', `Login successful! User ID: ${currentUserId}`, 'system');
-                    console.log('Auth token:', authToken);
-                    connectWebSocket();
-                    fetchUsers();
-                } else {
-                    throw new Error(data.error || 'Login failed');
+                console.log('Login response status:', response.status);
+                console.log('Login response headers:', response.headers);
+                
+                // Get the raw response body first for debugging
+                const responseText = await response.text();
+                console.log('Raw login response body:', responseText);
+                
+                // Parse the response if possible
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                    console.log('Parsed login response data:', data);
+                } catch (e) {
+                    console.error('Failed to parse login response as JSON:', e);
+                    throw new Error('Invalid response format from server');
                 }
+                
+                if (!response.ok) {
+                    let errorMessage = 'Login failed';
+                    if (data.message) {
+                        errorMessage = data.message;
+                    } else if (data.error) {
+                        errorMessage = data.error;
+                    }
+                    throw new Error(errorMessage);
+                }
+                
+                // Extract token from response structure
+                let extractedToken = null;
+                
+                // Visualize the entire response structure for debugging
+                console.log('Response structure:', JSON.stringify(data, null, 2));
+                
+                // Try different locations for token in response
+                if (data.data && data.data.token) {
+                    extractedToken = data.data.token;
+                    console.log('Found token in data.data.token');
+                } else if (data.token) {
+                    extractedToken = data.token;
+                    console.log('Found token in data.token');
+                } else if (data.access_token) {
+                    extractedToken = data.access_token;
+                    console.log('Found token in data.access_token');
+                } else {
+                    // Try to explore the response structure
+                    console.log('Searching for token in response...');
+                    const findTokenInObject = (obj, path = '') => {
+                        for (const key in obj) {
+                            if (typeof obj[key] === 'object' && obj[key] !== null) {
+                                findTokenInObject(obj[key], path + '.' + key);
+                            } else if ((key.includes('token') || key.includes('Token')) && typeof obj[key] === 'string') {
+                                console.log(`Possible token found at ${path}.${key}:`, obj[key]);
+                                extractedToken = obj[key];
+                            }
+                        }
+                    };
+                    
+                    findTokenInObject(data);
+                }
+                
+                authToken = extractedToken;
+                console.log('Final auth token:', authToken ? 'Found (first 20 chars: ' + authToken.substring(0, 20) + '...)' : 'Not found');
+                
+                if (!authToken) {
+                    throw new Error('No authentication token received from server');
+                }
+                
+                // Extract user ID from different possible locations
+                let userId = null;
+                
+                if (data.data && data.data.user && data.data.user.id) {
+                    userId = data.data.user.id;
+                    console.log('User ID found in data.data.user.id:', userId);
+                } else if (data.user && data.user.id) {
+                    userId = data.user.id;
+                    console.log('User ID found in data.user.id:', userId);
+                } else if (data.data && data.data.id) {
+                    userId = data.data.id;
+                    console.log('User ID found in data.data.id:', userId);
+                } else if (data.id) {
+                    userId = data.id;
+                    console.log('User ID found in data.id:', userId);
+                } else if (data.userId) {
+                    userId = data.userId;
+                    console.log('User ID found in data.userId:', userId);
+                }
+                
+                if (userId) {
+                    currentUserId = userId.toString();
+                } else if (authToken) {
+                    // Try to extract user ID from JWT token
+                    try {
+                        const tokenParts = authToken.split('.');
+                        console.log('Token parts length:', tokenParts.length);
+                        
+                        if (tokenParts.length === 3) {
+                            const payload = atob(tokenParts[1]);
+                            console.log('Decoded token payload:', payload);
+                            
+                            const tokenPayload = JSON.parse(payload);
+                            console.log('Token payload as JSON:', tokenPayload);
+                            
+                            // Look for user ID in token
+                            userId = tokenPayload.sub || tokenPayload.id || tokenPayload.user_id || tokenPayload.userId;
+                            console.log('User ID from token:', userId);
+                            
+                            if (userId) {
+                                currentUserId = userId.toString();
+                            }
+                        } else {
+                            console.warn('Token is not in JWT format (does not have 3 parts)');
+                        }
+                    } catch (e) {
+                        console.error('Error decoding token:', e);
+                    }
+                }
+                
+                if (!currentUserId) {
+                    throw new Error('Could not determine user ID from response');
+                }
+                
+                // Extract username
+                let username = 'User';
+                if (data.data && data.data.user && data.data.user.username) {
+                    username = data.data.user.username;
+                } else if (data.user && data.user.username) {
+                    username = data.user.username;
+                } else if (data.username) {
+                    username = data.username;
+                }
+                
+                appendMessage('System', `Login successful! Welcome, ${username}`, 'system');
+                
+                // Hide auth forms, show chat-related UI
+                document.querySelector('.tabs').style.display = 'none';
+                document.getElementById('loginTab').classList.add('hidden');
+                document.getElementById('registerTab').classList.add('hidden');
+                document.getElementById('chatList').classList.remove('hidden');
+                
+                connectWebSocket();
+                fetchUserChats();
             } catch (error) {
+                console.error('Login error:', error);
                 appendMessage('System', `Login error: ${error.message}`, 'error');
             }
         }
 
         // WebSocket Functions
         function connectWebSocket() {
+            // Close existing connection if any
             if (ws) {
+                clearPingInterval();
                 ws.close();
             }
-
-            const wsUrl = `ws://localhost:8080/api/v1/chat/ws`;
-            console.log('Connecting to WebSocket...');
             
+            // Don't attempt to connect if no token
+            if (!authToken) {
+                console.log('Cannot connect WebSocket: No auth token');
+                appendMessage('System', 'Login required to connect to chat server', 'error');
+                return;
+            }
+            
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.hostname}:8080/ws?token=${encodeURIComponent(authToken)}`;
+            
+            console.log('Connecting to WebSocket:', wsUrl);
             ws = new WebSocket(wsUrl);
             
-            ws.onopen = () => {
-                console.log('WebSocket connected, sending auth message...');
+            ws.onopen = function() {
+                console.log('Connected to WebSocket');
+                appendMessage('System', 'Connected to chat server', 'success');
+                document.getElementById('connectionStatus').textContent = 'Connected';
+                document.getElementById('connectionStatus').className = 'connected';
                 
-                // Send auth message immediately after connection
-                ws.send(JSON.stringify({
-                    type: 'auth',
-                    token: authToken
-                }));
+                // Reset reconnect attempts on successful connection
+                reconnectAttempts = 0;
                 
-                appendMessage('System', 'Connected to chat server', 'system');
-                startPing();
+                // Start ping interval
+                startPingInterval();
+                
+                // Join current chat if set
+                if (currentChatId) {
+                    joinChat(currentChatId);
+                }
             };
             
-            ws.onmessage = (event) => {
-                console.log('Received message:', event.data);
+            ws.onmessage = function(event) {
+                console.log('WebSocket message received:', event.data);
+                
                 try {
-                    const message = JSON.parse(event.data);
+                    const data = JSON.parse(event.data);
                     
-                    if (message.type === 'pong') {
-                        lastPongTime = Date.now();
+                    // Handle pong messages
+                    if (data.type === 'pong') {
+                        handlePong();
                         return;
                     }
                     
-                    if (message.error) {
-                        appendMessage('System', `Error: ${message.error}`, 'error');
-                        return;
+                    // Handle normal messages
+                    if (data.type === 'chat_message' || data.message_type === 'chat_message') {
+                        const senderId = data.sender_id || data.user_id;
+                        const content = data.content || data.text;
+                        const timestamp = data.timestamp ? new Date(data.timestamp) : new Date();
+                        
+                        if (senderId !== currentUserId) {
+                            appendMessage(senderId, content, 'received', timestamp);
+                        }
+                    } else if (data.type === 'error') {
+                        appendMessage('System', data.message || 'Error from server', 'error');
+                    } else {
+                        console.log('Unknown message type:', data);
                     }
-                    
-                    appendMessage(message.sender_id, message.content, 'received');
                 } catch (error) {
-                    console.error('Error parsing message:', error);
-                    appendMessage('System', 'Error parsing message from server', 'error');
+                    console.error('Error parsing WebSocket message:', error);
+                    appendMessage('System', 'Received malformed message from server', 'error');
                 }
             };
             
-            ws.onclose = (event) => {
-                console.log('WebSocket closed:', event);
-                appendMessage('System', `Disconnected from chat server (code: ${event.code})`, 'system');
-                stopPing();
+            ws.onclose = function(event) {
+                console.log('WebSocket connection closed:', event);
+                document.getElementById('connectionStatus').textContent = 'Disconnected';
+                document.getElementById('connectionStatus').className = 'disconnected';
                 
-                // Try to reconnect after 3 seconds if not intentionally closed
-                if (event.code !== 1000) {
-                    setTimeout(connectWebSocket, 3000);
+                clearPingInterval();
+                
+                // Show code in message
+                appendMessage('System', `Disconnected from chat server (Code: ${event.code})`, 'error');
+                
+                // Attempt to reconnect if not intentionally closed
+                if (event.code !== 1000 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+                    reconnectAttempts++;
+                    const delay = reconnectAttempts * 2000; // Exponential backoff
+                    appendMessage('System', `Reconnecting in ${delay/1000} seconds... (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`, 'info');
+                    
+                    setTimeout(connectWebSocket, delay);
+                } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                    appendMessage('System', 'Failed to reconnect after multiple attempts. Please refresh the page.', 'error');
                 }
             };
             
-            ws.onerror = (error) => {
+            ws.onerror = function(error) {
                 console.error('WebSocket error:', error);
-                appendMessage('System', 'Error connecting to chat server', 'error');
+                appendMessage('System', 'WebSocket connection error', 'error');
             };
         }
 
-        let pingInterval;
-        let lastPongTime = Date.now();
-
-        function startPing() {
-            stopPing();
+        function startPingInterval() {
+            clearPingInterval(); // Clear any existing interval
+            lastPongTime = Date.now(); // Reset last pong time
+            
             pingInterval = setInterval(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
-                    // Check if we haven't received a pong for more than 30 seconds
-                    if (Date.now() - lastPongTime > 30000) {
-                        console.log('No pong received for 30 seconds, reconnecting...');
+                    // Check if we've received a pong since last ping
+                    const timeSinceLastPong = Date.now() - lastPongTime;
+                    if (timeSinceLastPong > 30000) { // 30 seconds
+                        console.warn('No pong received for', timeSinceLastPong, 'ms. Reconnecting...');
+                        appendMessage('System', 'Connection timeout. Reconnecting...', 'error');
                         ws.close();
+                        connectWebSocket();
                         return;
                     }
                     
-                    ws.send(JSON.stringify({ type: 'ping' }));
+                    // Send ping
+                    try {
+                        ws.send(JSON.stringify({ type: 'ping' }));
+                        console.log('Ping sent');
+                    } catch (error) {
+                        console.error('Error sending ping:', error);
+                    }
                 }
-            }, 15000); // Send ping every 15 seconds
+            }, 15000); // Ping every 15 seconds
         }
 
-        function stopPing() {
+        function handlePong() {
+            lastPongTime = Date.now();
+            console.log('Pong received at', new Date(lastPongTime).toLocaleTimeString());
+        }
+
+        function clearPingInterval() {
             if (pingInterval) {
                 clearInterval(pingInterval);
                 pingInterval = null;
@@ -290,84 +606,393 @@
         }
 
         // Chat Functions
+        async function fetchUserChats() {
+            try {
+                if (!authToken) {
+                    appendMessage('System', 'Not authenticated. Please login first.', 'error');
+                    return;
+                }
+
+                appendMessage('System', 'Fetching your chats...', 'system');
+                console.log('Fetching chats with token:', authToken.substring(0, 10) + '...');
+                
+                const response = await fetch(`${API_BASE}/chat`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                    },
+                });
+
+                console.log('Chat response status:', response.status);
+                const responseText = await response.text();
+                console.log('Raw chat response:', responseText);
+                
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    console.error('Failed to parse JSON response:', e);
+                    throw new Error('Invalid response from server');
+                }
+                
+                console.log('Parsed chat response data:', data);
+                
+                // Handle different response structures
+                let chats = [];
+                if (data.data && Array.isArray(data.data)) {
+                    // API returns { data: [...chats] }
+                    chats = data.data;
+                } else if (Array.isArray(data)) {
+                    // API returns [...chats] directly
+                    chats = data;
+                } else if (data.chats && Array.isArray(data.chats)) {
+                    // API returns { chats: [...] }
+                    chats = data.chats;
+                }
+                
+                console.log('Extracted chats:', chats);
+                
+                if (response.ok) {
+                    displayChats(chats);
+                } else {
+                    let errorMessage = 'Failed to fetch chats';
+                    if (data.message) {
+                        errorMessage = data.message;
+                    } else if (data.error) {
+                        errorMessage = data.error;
+                    }
+                    throw new Error(errorMessage);
+                }
+            } catch (error) {
+                console.error('Error fetching chats:', error);
+                appendMessage('System', `Error fetching chats: ${error.message}`, 'error');
+            }
+        }
+
+        function displayChats(chats) {
+            const chatListContent = document.getElementById('chatListContent');
+            chatListContent.innerHTML = '';
+
+            if (chats.length === 0) {
+                const noChatsDiv = document.createElement('div');
+                noChatsDiv.textContent = 'No chats yet. Start a new conversation!';
+                noChatsDiv.style.padding = '10px';
+                noChatsDiv.style.fontStyle = 'italic';
+                chatListContent.appendChild(noChatsDiv);
+                return;
+            }
+
+            chats.forEach(chat => {
+                const chatDiv = document.createElement('div');
+                chatDiv.className = 'list-item';
+                
+                // Determine chat name: for direct chats, show other user's name
+                let chatName = chat.name || 'Chat';
+                if (chat.type === 'direct') {
+                    // Find the other member's ID
+                    const otherMemberId = chat.members.find(id => id !== currentUserId);
+                    chatName = `Chat with User ${otherMemberId}`;
+                }
+                
+                chatDiv.textContent = chatName;
+                chatDiv.onclick = () => selectChat(chat.id, chatName);
+                
+                if (chat.id === currentChatId) {
+                    chatDiv.classList.add('active');
+                }
+                
+                chatListContent.appendChild(chatDiv);
+            });
+        }
+
+        async function selectChat(chatId, chatName) {
+            console.log('Selecting chat:', chatId, chatName);
+            
+            // If chatId hasn't changed, don't do anything
+            if (currentChatId === chatId) {
+                console.log('Already in this chat, not changing');
+                return;
+            }
+            
+            // Save the current chat info
+            currentChatId = chatId;
+            selectedChatName = chatName;
+            
+            // Clear previous messages
+            messagesDiv.innerHTML = '';
+            appendMessage('System', `Showing messages for ${chatName}`, 'system');
+            
+            // Mark this chat as active in the UI
+            document.querySelectorAll('#chatListContent .list-item').forEach(item => {
+                item.classList.remove('active');
+                if (item.textContent === chatName) {
+                    item.classList.add('active');
+                }
+            });
+            
+            // Check WebSocket connection first
+            let needToReconnect = false;
+            
+            if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+                console.log('WebSocket not connected or closing. Will reconnect.');
+                needToReconnect = true;
+            }
+            
+            if (needToReconnect) {
+                // Connect WebSocket first, it will join the chat when connected
+                connectionStatus.textContent = 'Connecting...';
+                connectionStatus.className = 'connection-status disconnected';
+                connectWebSocket(); 
+                
+                // Small delay to allow connection to establish before fetching messages
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            } else if (ws.readyState === WebSocket.OPEN) {
+                // Only if WebSocket is already open, join the chat
+                console.log('WebSocket is connected. Joining chat room:', chatId);
+                joinChat(chatId);
+            }
+            
+            // Fetch chat messages regardless of WebSocket state
+            await fetchChatMessages(chatId);
+        }
+
+        async function fetchChatMessages(chatId) {
+            try {
+                console.log('Fetching messages for chat ID:', chatId);
+                
+                // Try with URL encoding the chatId
+                const encodedChatId = encodeURIComponent(chatId);
+                console.log('Encoded chat ID:', encodedChatId);
+                
+                // Add a timestamp to prevent caching
+                const timestamp = new Date().getTime();
+                
+                const response = await fetch(`${API_BASE}/chat/${encodedChatId}/messages?limit=50&_=${timestamp}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Accept': 'application/json',
+                        'Cache-Control': 'no-cache'
+                    },
+                });
+
+                console.log('Messages response status:', response.status);
+                
+                if (response.status === 404) {
+                    console.log('No messages found (404)');
+                    appendMessage('System', 'No messages found for this chat', 'system');
+                    return;
+                }
+                
+                const responseText = await response.text();
+                console.log('Raw messages response:', responseText);
+                
+                // Early exit if response is empty
+                if (!responseText || responseText.trim() === '') {
+                    console.log('Empty response received for messages');
+                    appendMessage('System', 'No messages yet in this chat', 'system');
+                    return; // No messages yet, which is fine
+                }
+                
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    console.error('Failed to parse JSON response:', e);
+                    appendMessage('System', 'Invalid response from server (parsing error)', 'error');
+                    return;
+                }
+                
+                console.log('Parsed messages response:', data);
+                
+                // Handle different response structures
+                let messages = [];
+                if (data.data && Array.isArray(data.data)) {
+                    // API returns { data: [...messages] }
+                    messages = data.data;
+                } else if (Array.isArray(data)) {
+                    // API returns [...messages] directly
+                    messages = data;
+                } else if (data.messages && Array.isArray(data.messages)) {
+                    // API returns { messages: [...] }
+                    messages = data.messages;
+                }
+                
+                console.log('Extracted messages:', messages);
+                
+                if (messages.length === 0) {
+                    appendMessage('System', 'No messages yet in this chat', 'system');
+                } else {
+                    // Display messages in reverse order (newest last)
+                    messages.reverse().forEach(msg => {
+                        const isOwnMessage = (msg.sender_id && msg.sender_id.toString() === currentUserId) || 
+                                             (msg.user_id && msg.user_id.toString() === currentUserId);
+                        appendMessage(
+                            msg.sender_id || msg.user_id, 
+                            msg.content || msg.text || '', 
+                            isOwnMessage ? 'sent' : 'received', 
+                            new Date(msg.created_at || msg.timestamp || Date.now())
+                        );
+                    });
+                }
+            } catch (error) {
+                console.error('Error fetching messages:', error);
+                appendMessage('System', `Error fetching messages: ${error.message}`, 'error');
+            }
+        }
+
+        function showNewChatUI() {
+            document.getElementById('chatList').classList.add('hidden');
+            document.getElementById('userList').classList.remove('hidden');
+            fetchUsers();
+        }
+
+        function hideNewChatUI() {
+            document.getElementById('userList').classList.add('hidden');
+            document.getElementById('chatList').classList.remove('hidden');
+        }
+
         async function createChat(otherUserId) {
             try {
                 if (!authToken) {
                     throw new Error('Not authenticated. Please login first.');
                 }
 
-                console.log('Creating chat with:', {
-                    currentUserId,
-                    otherUserId,
-                    authToken: authToken.substring(0, 10) + '...'
-                });
-
-                const chatData = {
-                    members: [currentUserId.toString(), otherUserId.toString()],
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString()
+                appendMessage('System', `Creating chat with user ${otherUserId}...`, 'system');
+                console.log('Creating chat with user ID:', otherUserId);
+                
+                const requestBody = {
+                    type: "direct",
+                    participants: [otherUserId]
                 };
-
-                console.log('Request body:', chatData);
-
+                console.log('Chat creation request body:', requestBody);
+                
                 const response = await fetch(`${API_BASE}/chat`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${authToken}`,
                     },
-                    body: JSON.stringify(chatData),
+                    body: JSON.stringify(requestBody),
                 });
 
-                const data = await response.json();
-                console.log('Response:', data);
-
+                console.log('Chat creation response status:', response.status);
+                const responseText = await response.text();
+                console.log('Raw chat creation response:', responseText);
+                
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    console.error('Failed to parse JSON response:', e);
+                    throw new Error('Invalid response from server');
+                }
+                
+                console.log('Parsed chat creation response:', data);
+                
                 if (!response.ok) {
-                    throw new Error(data.error || 'Failed to create chat');
+                    let errorMessage = 'Failed to create chat';
+                    if (data.message) {
+                        errorMessage = data.message;
+                    } else if (data.error) {
+                        errorMessage = data.error;
+                    }
+                    throw new Error(errorMessage);
                 }
 
-                if (!data.id) {
-                    throw new Error('Invalid chat ID received from server');
+                // Extract chat ID from response
+                let chatId = null;
+                if (data.data && data.data.id) {
+                    chatId = data.data.id;
+                } else if (data.id) {
+                    chatId = data.id;
+                } else if (data.chat_id) {
+                    chatId = data.chat_id;
                 }
-
-                currentChatId = data.id;
+                
+                if (!chatId) {
+                    console.error('No chat ID found in response:', data);
+                    throw new Error('Could not determine chat ID from response');
+                }
+                
+                currentChatId = chatId;
+                selectedChatName = `Chat with User ${otherUserId}`;
+                
                 appendMessage('System', `Started chat with user ${otherUserId}`, 'system');
-
-                // Only reconnect WebSocket if not connected
-                if (!ws || ws.readyState !== WebSocket.OPEN) {
-                    connectWebSocket();
-                }
+                
+                // Refresh chat list and select the new chat
+                await fetchUserChats();
+                hideNewChatUI();
+                
+                document.querySelectorAll('#chatListContent .list-item').forEach(item => {
+                    item.classList.remove('active');
+                    if (item.textContent === selectedChatName) {
+                        item.classList.add('active');
+                    }
+                });
             } catch (error) {
+                console.error('Error creating chat:', error);
                 appendMessage('System', `Error creating chat: ${error.message}`, 'error');
             }
         }
 
         function sendMessage() {
-            if (!ws || ws.readyState !== WebSocket.OPEN) {
-                appendMessage('System', 'Not connected to chat server', 'error');
-                return;
-            }
-            
             const messageInput = document.getElementById('messageInput');
-            if (!messageInput.value || !currentChatId) {
+            const content = messageInput.value.trim();
+            
+            if (!content) {
+                return; // Don't send empty messages
+            }
+            
+            if (!currentChatId) {
+                appendMessage('System', 'Please select a chat first', 'error');
                 return;
             }
             
+            if (!authToken) {
+                appendMessage('System', 'You are not authenticated. Please login first.', 'error');
+                return;
+            }
+            
+            // Check WebSocket connection
+            let needToReconnect = false;
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                needToReconnect = true;
+                appendMessage('System', 'Not connected to chat server. Reconnecting...', 'error');
+                connectWebSocket();
+            }
+            
+            // If reconnecting, wait and then retry
+            if (needToReconnect) {
+                setTimeout(() => sendMessage(), 1500);
+                return;
+            }
+            
+            // Create message object with multiple fields for compatibility
             const message = {
-                type: 'chat',
-                data: {
-                    chat_id: currentChatId,
-                    content: messageInput.value,
-                    message_type: "text",
-                    sender_id: currentUserId,
-                    created_at: new Date().toISOString()
-                }
+                type: "chat_message",
+                chat_id: currentChatId,
+                conversation_id: currentChatId,
+                content: content,
+                text: content,
+                sender_id: currentUserId,
+                user_id: currentUserId,
+                timestamp: new Date().toISOString()
             };
             
             console.log('Sending message:', message);
-            ws.send(JSON.stringify(message));
-            appendMessage(currentUserId, messageInput.value, 'sent');
-            messageInput.value = '';
+            
+            try {
+                // Send through WebSocket
+                ws.send(JSON.stringify(message));
+                
+                // Also show the message locally for immediate feedback
+                appendMessage(currentUserId, content, 'sent', new Date());
+                
+                // Clear input
+                messageInput.value = '';
+            } catch (error) {
+                console.error('Error sending message:', error);
+                appendMessage('System', `Error sending message: ${error.message}`, 'error');
+            }
         }
 
         function handleKeyPress(event) {
@@ -379,19 +1004,57 @@
         // User List Functions
         async function fetchUsers() {
             try {
+                appendMessage('System', 'Fetching users...', 'system');
+                console.log('Fetching users with token:', authToken.substring(0, 10) + '...');
+                
                 const response = await fetch(`${API_BASE}/users`, {
                     headers: {
                         'Authorization': `Bearer ${authToken}`,
                     },
                 });
 
-                const data = await response.json();
+                console.log('Users response status:', response.status);
+                const responseText = await response.text();
+                console.log('Raw users response:', responseText);
+                
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                } catch (e) {
+                    console.error('Failed to parse JSON response:', e);
+                    throw new Error('Invalid response from server');
+                }
+                
+                console.log('Parsed users response:', data);
+                
+                // Handle different response structures
+                let users = [];
+                if (data.data && Array.isArray(data.data)) {
+                    // API returns { data: [...users] }
+                    users = data.data;
+                } else if (Array.isArray(data)) {
+                    // API returns [...users] directly
+                    users = data;
+                } else if (data.users && Array.isArray(data.users)) {
+                    // API returns { users: [...] }
+                    users = data.users;
+                }
+                
+                console.log('Extracted users:', users);
+                
                 if (response.ok) {
-                    displayUsers(data);
+                    displayUsers(users);
                 } else {
-                    throw new Error(data.error || 'Failed to fetch users');
+                    let errorMessage = 'Failed to fetch users';
+                    if (data.message) {
+                        errorMessage = data.message;
+                    } else if (data.error) {
+                        errorMessage = data.error;
+                    }
+                    throw new Error(errorMessage);
                 }
             } catch (error) {
+                console.error('Error fetching users:', error);
                 appendMessage('System', `Error fetching users: ${error.message}`, 'error');
             }
         }
@@ -400,24 +1063,96 @@
             const userListContent = document.getElementById('userListContent');
             userListContent.innerHTML = '';
 
+            if (users.length <= 1) {
+                const noUsersDiv = document.createElement('div');
+                noUsersDiv.textContent = 'No other users found.';
+                noUsersDiv.style.padding = '10px';
+                noUsersDiv.style.fontStyle = 'italic';
+                userListContent.appendChild(noUsersDiv);
+                return;
+            }
+
             users.forEach(user => {
                 if (user.id !== currentUserId) {
                     const userDiv = document.createElement('div');
-                    userDiv.className = 'user-item';
-                    userDiv.textContent = user.username;
+                    userDiv.className = 'list-item';
+                    userDiv.textContent = user.username || `User ${user.id}`;
                     userDiv.onclick = () => createChat(user.id);
                     userListContent.appendChild(userDiv);
                 }
             });
         }
 
-        function appendMessage(sender, content, type) {
+        function appendMessage(sender, content, type, timestamp = null) {
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${type}`;
-            messageDiv.textContent = `${sender}: ${content}`;
+            
+            // Create sender element
+            const senderElement = document.createElement('div');
+            senderElement.className = 'message-sender';
+            
+            // For system/error messages, show sender directly
+            if (type === 'system' || type === 'error') {
+                senderElement.textContent = sender;
+            } else {
+                // For chat messages, show friendly name
+                senderElement.textContent = sender === currentUserId ? 'You' : `User ${sender}`;
+            }
+            
+            // Create content element
+            const contentElement = document.createElement('div');
+            contentElement.textContent = content;
+            
+            // Add elements to message div
+            messageDiv.appendChild(senderElement);
+            messageDiv.appendChild(contentElement);
+            
+            // Add timestamp if provided
+            if (timestamp) {
+                const timeElement = document.createElement('div');
+                timeElement.className = 'message-time';
+                timeElement.textContent = timestamp.toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                messageDiv.appendChild(timeElement);
+            }
+            
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
+
+        function joinChat(chatId) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                appendMessage('System', 'Cannot join chat: WebSocket not connected', 'error');
+                return false;
+            }
+            
+            if (!chatId) {
+                appendMessage('System', 'Cannot join chat: No chat ID specified', 'error');
+                return false;
+            }
+            
+            try {
+                console.log('Joining chat room:', chatId);
+                const joinMessage = {
+                    type: "join",
+                    chat_id: chatId
+                };
+                ws.send(JSON.stringify(joinMessage));
+                currentChatId = chatId;
+                appendMessage('System', `Joining chat room ${chatId}...`, 'info');
+                return true;
+            } catch (error) {
+                console.error('Error joining chat:', error);
+                appendMessage('System', `Failed to join chat: ${error.message}`, 'error');
+                return false;
+            }
+        }
+
+        // Initialize UI
+        appendMessage('System', 'Welcome to Fowergram Chat Test', 'system');
+        appendMessage('System', 'Please login or register to start', 'system');
     </script>
 </body>
 </html> 
