@@ -118,10 +118,8 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
-	// Log request body
-	requestBody := string(c.Body())
+	// Don't log the entire request body which contains credentials
 	h.log.Info("Login request received",
-		logger.NewField("body", requestBody),
 		logger.NewField("ip", c.IP()),
 		logger.NewField("user_agent", c.Get("User-Agent")),
 	)
@@ -130,7 +128,6 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	if err := c.BodyParser(req); err != nil {
 		h.log.Warn("Error parsing login request",
 			logger.NewField("error", err.Error()),
-			logger.NewField("body", requestBody),
 		)
 		return response.InvalidFormat(c, err, map[string]string{
 			"identifier": "string (email or username)",

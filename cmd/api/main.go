@@ -23,7 +23,6 @@ import (
 	"fowergram/pkg/logger"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberLogger "github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 )
@@ -68,6 +67,9 @@ func main() {
 		IdleTimeout:           120 * time.Second,
 	})
 
+	// Create security middleware
+	securityMiddleware := middleware.NewSecurityMiddleware()
+
 	// Middleware
 	app.Use(recover.New())
 	app.Use(middleware.RequestMonitoring(log))
@@ -76,7 +78,9 @@ func main() {
 		TimeFormat: "2006-01-02 15:04:05",
 		TimeZone:   "Local",
 	}))
-	app.Use(cors.New())
+	// Apply security middleware
+	app.Use(securityMiddleware.SecurityHeaders())
+	app.Use(securityMiddleware.CORS())
 
 	routes.SetupHealthRoutes(app)
 	api := app.Group("/api/v1")

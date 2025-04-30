@@ -3,6 +3,8 @@ package logger
 import (
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/rs/zerolog"
 )
@@ -34,8 +36,55 @@ type ZerologService struct {
 	logger zerolog.Logger
 }
 
+// Sensitive field names that should be masked
+var sensitiveFields = []string{
+	"password", "token", "secret", "key", "auth", "credential", "jwt", "body",
+	"access_token", "refresh_token", "authorization", "api_key", "apikey",
+}
+
+// Function to sanitize sensitive data
+func sanitizeValue(key string, value interface{}) interface{} {
+	// If not a string value, return as is
+	strValue, ok := value.(string)
+	if !ok {
+		return value
+	}
+
+	// Check if field name contains sensitive keywords
+	keyLower := strings.ToLower(key)
+	for _, field := range sensitiveFields {
+		if strings.Contains(keyLower, field) {
+			// Special handling for JSON bodies that might contain passwords
+			if field == "body" && strings.Contains(strValue, "password") {
+				// Mask passwords in JSON
+				re := regexp.MustCompile(`"password"\s*:\s*"[^"]*"`)
+				strValue = re.ReplaceAllString(strValue, `"password":"*****"`)
+
+				// Mask tokens in JSON
+				re = regexp.MustCompile(`"token"\s*:\s*"[^"]*"`)
+				strValue = re.ReplaceAllString(strValue, `"token":"*****"`)
+
+				return strValue
+			}
+
+			// For other sensitive fields, mask completely
+			return "*****"
+		}
+	}
+
+	// Also check for JWT token patterns
+	if strings.Contains(strValue, "eyJ") && strings.Count(strValue, ".") >= 2 {
+		parts := strings.Split(strValue, ".")
+		if len(parts) >= 3 {
+			return parts[0][:10] + "..." // Only show the beginning of the token
+		}
+	}
+
+	return value
+}
+
 func NewField(key string, value interface{}) Field {
-	return Field{Key: key, Value: value}
+	return Field{Key: key, Value: sanitizeValue(key, value)}
 }
 
 func NewLogger(level LogLevel) *ZerologService {

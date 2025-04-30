@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"fowergram/pkg/logger"
@@ -37,10 +38,14 @@ func RequestMonitoring(log *logger.ZerologService) fiber.Handler {
 		// Calculate duration
 		duration := time.Since(start)
 
-		// Collect query params
+		// Collect query params, but filter out any sensitive parameters
 		queryParams := make(map[string]string)
 		c.Context().QueryArgs().VisitAll(func(key, value []byte) {
-			queryParams[string(key)] = string(value)
+			keyStr := string(key)
+			// Skip logging sensitive query parameters
+			if !containsSensitiveInfo(keyStr) {
+				queryParams[keyStr] = string(value)
+			}
 		})
 
 		// Create metrics
@@ -60,6 +65,22 @@ func RequestMonitoring(log *logger.ZerologService) fiber.Handler {
 
 		return err
 	}
+}
+
+// Check if a parameter name contains sensitive information
+func containsSensitiveInfo(paramName string) bool {
+	paramName = strings.ToLower(paramName)
+	sensitiveParams := []string{
+		"password", "token", "secret", "key", "auth", "jwt", "api_key",
+		"apikey", "credential", "session", "cookie",
+	}
+
+	for _, sensitive := range sensitiveParams {
+		if strings.Contains(paramName, sensitive) {
+			return true
+		}
+	}
+	return false
 }
 
 func logRequestMetrics(log *logger.ZerologService, metrics RequestMetrics) {
