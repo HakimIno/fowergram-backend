@@ -2,7 +2,7 @@ package mongodb
 
 import (
 	"context"
-	"fowergram/internal/chat/domain"
+	"fowergram/internal/domain/chat"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"

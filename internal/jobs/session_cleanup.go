@@ -1,7 +1,7 @@
 package jobs
 
 import (
-	"fowergram/internal/core/domain"
+	"fowergram/internal/domain"
 	"time"
 
 	"gorm.io/gorm"

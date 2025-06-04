@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"fowergram/internal/core/domain"
+	"fowergram/internal/domain"
 	"fowergram/internal/core/ports"
 
 	"github.com/gofiber/fiber/v2"

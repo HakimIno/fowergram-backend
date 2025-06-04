@@ -1,7 +1,7 @@
 package middleware
 
 import (
-	"fowergram/internal/core/domain"
+	"fowergram/internal/domain"
 	"fowergram/pkg/security"
 
 	"github.com/gofiber/fiber/v2"

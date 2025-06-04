@@ -1,7 +1,7 @@
 package service
 
 import (
-	"fowergram/internal/chat/domain"
+	"fowergram/internal/domain/chat"
 	"fowergram/internal/chat/repository"
 )
 

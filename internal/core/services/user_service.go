@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"fowergram/internal/core/domain"
+	"fowergram/internal/domain"
 	"fowergram/internal/core/ports"
 )
 

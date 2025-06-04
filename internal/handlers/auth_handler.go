@@ -2,8 +2,8 @@ package handlers
 
 import (
 	"fmt"
-	"fowergram/internal/core/domain"
 	"fowergram/internal/core/ports"
+	"fowergram/internal/domain"
 	"fowergram/pkg/errors"
 	"fowergram/pkg/logger"
 	"fowergram/pkg/response"

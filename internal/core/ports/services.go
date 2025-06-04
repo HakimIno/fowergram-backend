@@ -1,7 +1,7 @@
 package ports
 
 import (
-	"fowergram/internal/core/domain"
+	"fowergram/internal/domain"
 	"fowergram/pkg/email"
 	"fowergram/pkg/geolocation"
 	"fowergram/pkg/logger"

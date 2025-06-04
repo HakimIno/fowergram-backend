@@ -2,7 +2,7 @@ package email
 
 import (
 	"fmt"
-	"fowergram/internal/core/domain"
+	"fowergram/internal/domain"
 	"time"
 
 	"github.com/sendgrid/sendgrid-go"

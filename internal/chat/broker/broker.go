@@ -2,7 +2,7 @@ package broker
 
 import (
 	"context"
-	"fowergram/internal/chat/domain"
+	"fowergram/internal/domain/chat"
 )
 
 type MessageProducer interface {

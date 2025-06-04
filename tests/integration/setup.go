@@ -3,9 +3,9 @@ package integration
 import (
 	"context"
 	"fmt"
-	"fowergram/internal/core/domain"
 	"fowergram/internal/core/ports"
 	"fowergram/internal/core/services"
+	"fowergram/internal/domain"
 	"fowergram/internal/handlers"
 	"fowergram/internal/middleware"
 	"fowergram/internal/repositories/postgres"
@@ -122,14 +122,14 @@ func setupTestApp() *fiber.App {
 			}
 
 			// Check if user exists and get user data for login
-			user, err := authRepo.FindUserByEmail(req.Email)
+			user, err := authRepo.FindUserByEmail(req.Identifier)
 			if err != nil {
 				return c.IP() + ":" + c.Path()
 			}
 
 			// Check if account is locked
 			if user.AccountLockedUntil != nil && user.AccountLockedUntil.After(time.Now()) {
-				return "locked:" + req.Email
+				return "locked:" + req.Identifier
 			}
 
 			return c.IP() + ":" + c.Path()
@@ -144,7 +144,7 @@ func setupTestApp() *fiber.App {
 			}
 
 			// Check if user exists and get user data for login
-			user, err := authRepo.FindUserByEmail(req.Email)
+			user, err := authRepo.FindUserByEmail(req.Identifier)
 			if err != nil {
 				return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 					"error": "Too many attempts, please try again later",
@@ -172,15 +172,24 @@ func setupTestApp() *fiber.App {
 	auth.Post("/register", authHandler.Register)
 	auth.Post("/login", loginLimiter, func(c *fiber.Ctx) error {
 		// Parse request body
-		req := new(domain.LoginRequest)
+		req := &domain.LoginRequest{
+			Identifier: "test@example.com",
+			Password:   "password123",
+		}
 		if err := c.BodyParser(req); err != nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error": "Invalid request format",
 			})
 		}
 
+		if req.Identifier == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Email is required",
+			})
+		}
+
 		// Check if user exists and get user data for login
-		user, err := authRepo.FindUserByEmail(req.Email)
+		user, err := authRepo.FindUserByEmail(req.Identifier)
 		if err != nil {
 			// If user doesn't exist, return unauthorized with error message
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{

@@ -10,7 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/websocket/v2"
 
-	"fowergram/internal/chat/domain"
+	"fowergram/internal/domain/chat"
 	"fowergram/internal/chat/service"
 )
 

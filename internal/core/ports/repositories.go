@@ -1,7 +1,7 @@
 package ports
 
 import (
-	"fowergram/internal/core/domain"
+	"fowergram/internal/domain"
 	"time"
 )
 

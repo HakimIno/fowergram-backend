@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"fowergram/internal/chat/domain"
+	"fowergram/internal/domain/chat"
 	"fowergram/internal/chat/repository"
 
 	"github.com/stretchr/testify/assert"

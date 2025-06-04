@@ -1,7 +1,7 @@
 package helpers
 
 import (
-	"fowergram/internal/core/domain"
+	"fowergram/internal/domain"
 
 	"gorm.io/gorm"
 )

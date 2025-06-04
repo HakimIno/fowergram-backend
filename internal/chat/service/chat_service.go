@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"fowergram/internal/chat/broker"
-	"fowergram/internal/chat/domain"
 	"fowergram/internal/chat/repository"
+	domain "fowergram/internal/domain/chat"
 )
 
 type ChatService struct {

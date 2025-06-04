@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"fowergram/internal/core/domain"
+	"fowergram/internal/domain"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
@@ -196,7 +196,7 @@ func TestAuthService_Login(t *testing.T) {
 			mockGeo.ExpectedCalls = nil
 			tt.setup()
 
-			_, _, err := service.Login(tt.email, tt.pass, &domain.DeviceSession{
+			_, _, _, err := service.Login(tt.email, tt.pass, &domain.DeviceSession{
 				DeviceType: "Browser",
 				IPAddress:  "127.0.0.1",
 			})

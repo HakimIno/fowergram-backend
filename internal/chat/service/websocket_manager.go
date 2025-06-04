@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 
-	"fowergram/internal/chat/domain"
+	"fowergram/internal/domain/chat"
 
 	"github.com/gofiber/websocket/v2"
 )

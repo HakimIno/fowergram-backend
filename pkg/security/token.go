@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"fowergram/internal/core/domain"
+	"fowergram/internal/domain"
 
 	"encoding/hex"
 

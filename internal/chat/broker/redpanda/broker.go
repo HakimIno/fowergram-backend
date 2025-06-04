@@ -3,7 +3,7 @@ package redpanda
 import (
 	"context"
 	"encoding/json"
-	"fowergram/internal/chat/domain"
+	domain "fowergram/internal/domain/chat"
 	"log"
 
 	"github.com/twmb/franz-go/pkg/kgo"
